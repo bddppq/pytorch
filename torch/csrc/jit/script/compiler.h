@@ -12,18 +12,14 @@ struct CompilationUnitImpl;
 struct CompilationUnit {
   CompilationUnit();
   void define(const std::string& str);
-  void defineExtern(const std::string& str, std::unique_ptr<NetDef> netdef);
-  std::unique_ptr<NetBase> createNet(Workspace* ws, const std::string& name);
-  std::string getProto(const std::string& functionName) const;
+  const Graph& getGraph(const std::string& func_name);
   ~CompilationUnit();
 
  private:
   std::unique_ptr<CompilationUnitImpl> pImpl;
 };
 
- CompilationUnit jitScriptCompile(const std::string& script);
- std::vector<at::Tensor> jitScriptExecute(const CompilationUnit& cu,
-                                          const std::vector<at::Tensor>& inputs);
+std::unique_ptr<CompilationUnit> jitScriptCompile(const std::string& script);
 
 } // namespace script
 } // namespace jit

@@ -18,7 +18,6 @@ import copy
 _flatten = torch._C._jit_flatten
 _unflatten = torch._C._jit_unflatten
 _jit_script_compile = torch._C._jit_script_compile
-_jit_script_execute = torch._C._jit_script_execute
 
 # This global variable is set when we are tracing a *forwards* computation.
 # It is intended to be a cheap way to test if tracing has occurred, before
@@ -435,5 +434,4 @@ if not torch._C._jit_init():
 
 
 def jit_script(script):
-    graph = _jit_script_compile(script)
-    return functools.partial(_jit_script_execute, graph)
+    return _jit_script_compile(script)

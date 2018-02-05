@@ -495,6 +495,7 @@ main_sources = [
     "torch/csrc/jit/generated/aten_dispatch.cpp",
     "torch/csrc/jit/script/lexer.cpp",
     "torch/csrc/jit/script/compiler.cpp",
+    "torch/csrc/jit/script/init.cpp",
     "torch/csrc/autograd/init.cpp",
     "torch/csrc/autograd/grad_mode.cpp",
     "torch/csrc/autograd/engine.cpp",

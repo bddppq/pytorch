@@ -112,6 +112,7 @@ _(max) \
 _(min) \
 _(ne) \
 _(ones) \
+_(ones_like) \
 _(pow) \
 _(reciprocal) \
 _(remainder) \
@@ -124,6 +125,7 @@ _(sub) \
 _(tan) \
 _(trunc) \
 _(zeros) \
+_(zeros_like) \
 _(exponent) \
 _(device) \
 _(__if__)

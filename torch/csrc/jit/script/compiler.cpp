@@ -12,7 +12,7 @@ namespace {
 // Graph + metadata
 struct FunctionDefinition {
   explicit FunctionDefinition(Def tree_)
-      : tree(new Def(tree_)), _graph(new Graph()) {}
+      : tree(new Def(tree_)), graph(new Graph()) {}
 
   explicit FunctionDefinition(std::unique_ptr<Graph> graph_)
       : tree(nullptr), graph(std::move(graph_)) {}
@@ -26,31 +26,25 @@ struct FunctionDefinition {
 
 } // namespace
 
-using SymbolTable = std::unordered_map<std::string, FunctionDefinition>;
+using FunctionTable = std::unordered_map<std::string, FunctionDefinition>;
+using ValueTable = std::unordered_map<std::string, Value*>;
 
 struct DefCompiler {
-  DefCompiler(FunctionDefinition& def, SymbolTable& symbol_table)
+  DefCompiler(FunctionDefinition& def, FunctionTable& function_table)
       : def(def),
-        graph_stack({def.graph.get()}),
-        symbol_table(symbol_table) {}
+        function_table(function_table) {}
+
+  // populate def->graph
   void run() {
     auto& tree = *def.tree;
-    cur().set_name(tree.name().name());
     for (auto input : tree.params()) {
       auto& name = input.ident().name();
-      map(name, name);
-      def.inputs.push_back(name);
-    }
-    for (auto output : tree.returns()) {
-      auto& name = output.ident().name();
-      map(name, name);
-      def.outputs.push_back(name);
+      map(name, def.graph->addInput(name));
     }
     emitStatements(tree.statements());
-  }
-  void emitExpressionStatement(TreeRef stmt) {
-    // expression with no used outputs
-    emit(stmt, {});
+    for (auto output : tree.returns()) {
+      def.graph->registerOutput(lookup(output.ident()));
+    }
   }
   void emitStatements(const ListView<TreeRef>& statements) {
     for (auto stmt : statements) {
@@ -66,8 +60,8 @@ struct DefCompiler {
           break;
         case TK_GLOBAL:
           for (auto ident : stmt->trees()) {
-            auto name = Ident(ident).name();
-            map(name, name);
+            const auto& name = Ident(ident).name();
+            map(name, def.graph->addInput(name));
           }
           break;
         default:
@@ -76,25 +70,25 @@ struct DefCompiler {
       }
     }
   }
-  void map(const std::string& name, const std::string& value) {
-    env[name] = value;
+  void emitIf(const If& stmt) {
+      // TODO: add support for control flow ops
+      throw ErrorReport(stmt)
+          << "Control flow is not supported yet.";
   }
-  const std::string& lookup(const Ident& ident) {
-    if (env.count(ident.name()) == 0)
-      throw ErrorReport(ident) << "undefined value " << ident.name();
-    return env[ident.name()];
+
+  void emitWhile(const While& stmt) {
+      // TODO: add support for control flow ops
+      throw ErrorReport(stmt)
+          << "Control flow is not supported yet.";
   }
-  void emitAssignment(const Assign& stmt) {
-    std::vector<std::string> outputs;
-    for (auto lhs : stmt.lhs()) {
-      std::string name = getLHS(lhs);
-      // use of "_" gets renamed in Caffe2 graphs so that two uses
-      // don't unintentionally interfere with each other
-      if (name == "_") {
-        name = fresh();
-      }
-      outputs.push_back(name);
-    }
+
+  void emitExpressionStatement(TreeRef stmt) {
+    // expression with no used outputs
+    emit(stmt);
+  }
+
+  std::vector<Value*> emitAssignment(const Assign& stmt) {
+    std::vector<Value*> outputs{stmt.lhs().size()};
     if (stmt.reduction() != '=') {
       if (stmt.lhs().size() != 1) {
         throw ErrorReport(stmt)
@@ -104,9 +98,9 @@ struct DefCompiler {
       auto lhs = stmt.lhs()[0];
       auto expr =
           Compound::create(stmt.reduction(), stmt.range(), {lhs, stmt.rhs()});
-      emit(expr, outputs);
+      outputs = emit(expr, 1);
     } else {
-      emit(stmt.rhs(), outputs);
+      outputs = emit(stmt.rhs(), stmt.lhs().size());
     }
     int i = 0;
     for (auto ident : stmt.lhs()) {
@@ -114,55 +108,20 @@ struct DefCompiler {
         map(Ident(ident).name(), outputs.at(i));
       i++;
     }
+    return outputs;
   }
 
-  void emitIf(const If& stmt) {
-      // TODO: add support for control flow ops
+  void map(const std::string& name, Value* value) {
+    value_table[name] = value;
   }
 
-  void emitWhile(const While& stmt) {
-      // TODO: add support for control flow ops
+  Value* lookup(const Ident& ident) {
+    if (value_table.count(ident.name()) == 0)
+      throw ErrorReport(ident) << "undefined value " << ident.name();
+    return value_table[ident.name()];
   }
 
-  std::string getLHS(const TreeRef& tree) {
-    switch (tree->kind()) {
-      case TK_IDENT: {
-        return Ident(tree).name();
-      } break;
-      case '.': {
-        auto sel = Select(tree);
-        std::string lhs = getValue(sel.value());
-        // TODO: check whether this subname exists in object lhs
-        return lhs + "/" + sel.selector().name();
-      } break;
-      default: {
-        throw ErrorReport(tree)
-            << "This expression cannot appear on the left-hand size of an assignment";
-      } break;
-    }
-  }
-  Symbol getValue(const TreeRef& tree) {
-    switch (tree->kind()) {
-      case TK_IDENT: {
-        return lookup(Ident(tree));
-      } break;
-      case '.': {
-        auto sel = Select(tree);
-        std::string lhs = getValue(sel.value());
-        // TODO: check whether this subname exists in object lhs
-        return lhs + "/" + sel.selector().name();
-      } break;
-      default: {
-        std::string name = fresh();
-        emit(tree, {name});
-        return name;
-      } break;
-    }
-  }
-  std::string fresh(std::string prefix = "$t") {
-    return std::string(prefix) + std::to_string(next_fresh++);
-  }
-  Symbol kindSymbol(int kind, int ninputs) {
+  NodeKind getKind(int kind, int ninputs) {
     switch (kind) {
       case '+':
         return kAdd;
@@ -199,217 +158,54 @@ struct DefCompiler {
         throw std::runtime_error("unknown kind " + std::to_string(kind));
     }
   }
-  void fillArg(Argument* arg, const Attribute& attr) {
-    std::string name = attr.name().name();
-    arg->set_name(name);
-    auto value = attr.value();
-    // TODO: handle non-float attributes
-    switch (value->kind()) {
-      case TK_CONST: {
-        auto v = value->tree(0)->doubleValue();
-        auto f = value->tree(1)->stringValue();
-        if (f == "f")
-          arg->set_f(v);
-        else
-          arg->set_i(v);
-      } break;
-      case TK_LIST:
-        for (auto t : value->trees()) {
-          auto v = t->tree(0)->doubleValue();
-          auto f = t->tree(1)->stringValue();
-          if (f == "f")
-            arg->add_floats(v);
-          else
-            arg->add_ints(v);
-        }
-        break;
-    }
-  }
-  template <typename Trees>
-  std::vector<std::string> getValues(const Trees& trees) {
-    std::vector<std::string> result;
-    for (const auto& tree : trees) {
-      result.push_back(getValue(tree));
-    }
-    return result;
-  }
 
-  bool renameLookup(
-      std::unordered_map<std::string, std::string>& rename_map,
-      const std::string& name,
-      std::string& rename) {
-    // first look for name in the map directly
-    auto it = rename_map.find(name);
-    if (it != rename_map.end()) {
-      rename = it->second;
-      return true;
-    }
-    // otherwise if we have a rename entry like a => b and a name "a/foo/bar"
-    // then replace it with "b/foo/bar"
-    auto p = name.find("/");
-    if (p == std::string::npos)
-      return false;
-    it = rename_map.find(name.substr(0, p));
-    if (it != rename_map.end()) {
-      rename = it->second + name.substr(p);
-      return true;
-    }
-    return false;
-  }
-  void renameOp(
-      std::unordered_map<std::string, std::string>& rename_map,
-      const Apply& apply,
-      const std::string& prefix,
-      bool isExtern,
-      OperatorDef* new_op) {
-    for (size_t i = 0; i < new_op->input().size(); i++) {
-      auto& name = new_op->input(i);
-      std::string renamed;
-      bool defined = renameLookup(rename_map, name, renamed);
-      if (!isExtern && !defined) {
-        throw ErrorReport(apply)
-            << " unexpected undefined name '" << name
-            << "' while attempting to inline '" << apply.name().name() << "'";
-      } else if (!defined) {
-        // extern function using a global name, assign it an identity mapping
-        rename_map[name] = name;
-      }
-      new_op->set_input(i, renamed);
-    }
-    for (size_t i = 0; i < new_op->output().size(); i++) {
-      auto& name = new_op->output(i);
-      std::string renamed;
-      if (!renameLookup(rename_map, name, renamed)) {
-        renamed = prefix + name;
-        rename_map[name] = renamed;
-      }
-      new_op->set_output(i, renamed);
-    }
-    // TODO: add support for control flow ops
-  }
-
-  bool hasBypassRename(const Apply& apply) {
-    for (auto attr : apply.attributes()) {
-      if (attr.name().name() == "rename") {
-        if (attr.value()->kind() != TK_CONST) {
-          throw ErrorReport(attr.value()) << "expected a single constant";
-        }
-        return attr.value()->tree(0)->doubleValue() == 0;
-      }
-    }
-    return false;
-  }
-
-  // emit a function call by inlining the function's Graph into our
-  // Graph, renaming temporaries func_name<unique_id>/orig_name
-  // renaming only happens for values defined by the function
-  // that are not marked outputs
-
-  // inputs/outputs are passed by reference
-  void emitFunctionCall(Apply& apply, const std::vector<std::string>& outputs) {
-    std::string fname = apply.name().name();
-    std::string prefix = fresh(fname) + "/";
-    auto& fn = symbol_table.at(apply.name().name());
-    bool isExtern = fn.isExtern();
-    auto inputs = getValues(apply.inputs());
-    std::unordered_map<std::string, std::string> rename_map;
-    if (inputs.size() != fn.inputs.size()) {
-      throw ErrorReport(apply) << fname << " expected " << fn.inputs.size()
-                               << " values but received " << inputs.size();
-    }
-    for (size_t i = 0; i < inputs.size(); i++) {
-      rename_map[fn.inputs[i]] = inputs[i];
-    }
-    if (outputs.size() != fn.outputs.size()) {
-      throw ErrorReport(apply) << fname << " expected " << fn.outputs.size()
-                               << " values but received " << outputs.size();
-    }
-    for (size_t i = 0; i < outputs.size(); i++) {
-      rename_map[fn.outputs[i]] = outputs[i];
-    }
-    for (auto& op : fn.graph->op()) {
-      auto new_op = cur().add_op();
-      new_op->CopyFrom(op);
-      if (hasBypassRename(apply)) {
-        prefix = "";
-      }
-      renameOp(rename_map, apply, prefix, isExtern, new_op);
-    }
-  }
-  void expectOutputs(
-      const TreeRef& tree,
-      const std::vector<std::string>& outputs,
-      size_t size) {
-    if (outputs.size() != size) {
-      throw ErrorReport(tree)
-          << "expected operator to produce " << outputs.size()
-          << " outputs but it produced " << size;
-    }
-  }
-  void appendOutputs(
-      const TreeRef& tree,
-      OperatorDef* op,
-      const std::vector<std::string>& outputs,
-      size_t size) {
-    expectOutputs(tree, outputs, size);
-    for (size_t i = 0; i < size; i++) {
-      op->add_output(outputs[i]);
-    }
-  }
-  void emitNode(
-      const Apply& apply,
-      const std::vector<std::string>& outputs) {
-    // must be before add_op
-    auto values = getValues(apply.inputs());
-    if (values.size() < schema->min_input() ||
-        values.size() > schema->max_input()) {
-      if (schema->min_input() == schema->max_input()) {
-        throw ErrorReport(apply) << "operator expects " << schema->min_input()
-                                 << " inputs but found " << values.size();
-      } else {
-        throw ErrorReport(apply)
-            << "operator takes between " << schema->min_input() << " and "
-            << schema->max_input() << " inputs but found " << values.size()
-            << ".";
-      }
-    }
-    auto numActualOutputs = schema->CalculateOutput(values.size());
-    if (numActualOutputs != kCannotComputeNumOutputs &&
-        outputs.size() != numActualOutputs) {
-      throw ErrorReport(apply)
-          << "operator produces " << numActualOutputs
-          << " outputs but matched to " << outputs.size() << " outputs";
-    }
-    auto op = cur().add_op();
-    op->set_type(apply.name().name());
-    for (auto& v : values) {
-      op->add_input(v);
-    }
-    // assume 1 output unless matched to more
-    appendOutputs(apply, op, outputs, outputs.size());
-    for (auto attribute : apply.attributes()) {
-      fillArg(op->add_arg(), attribute);
-    }
-    // Ok, we checked the stuff where we can easily give a friendly error
-    // message, now verify against the schema and report the error at the line
-    if (!schema->Verify(*op)) {
-      throw ErrorReport(apply) << "failed schema checking";
-    }
-  }
-
-  // Emit an operation, writing results into 'outputs'.
-  // This will _always_ compute something, unlike 'getValue' which simply
-  // returns an already computed reference if possible.
-  // So if 'tree' is an identifier or nested identifier (foo.bar)
-  // this will cause it to be _copied_ into outputs.
-  void emit(const TreeRef& tree, const std::vector<std::string>& outputs) {
+  Value* getValue(const TreeRef& tree) {
     switch (tree->kind()) {
       case TK_IDENT:
       case '.': {
-        auto op = cur().add_op();
-        op->set_type("Copy");
-        op->add_input(getValue(tree));
-        appendOutputs(tree, op, outputs, 1);
+        return lookup(Ident(tree));
+      } break;
+      default: {
+        const auto outputs = emit(tree, 1);
+        return outputs[0];
+      } break;
+    }
+  }
+
+  template <typename Trees>
+  std::vector<Value*> getValues(const Trees& trees) {
+    std::vector<Value*> values;
+    for (const auto& tree : trees) {
+      values.push_back(getValue(tree));
+    }
+    return values;
+  }
+
+  // emit a function call by inlining the function's Graph into our
+  // Graph
+  std::vector<Value*> emitFunctionCall(Apply& apply, const size_t output_size) {
+    return {};
+    // TODO: Add support for function call
+  }
+
+  void expectOutputs(
+      const TreeRef& tree,
+      const size_t expected_size,
+      const size_t size) {
+    if (expected_size != 0 && expected_size != size) {
+      throw ErrorReport(tree)
+          << "expected operator to produce " << expected_size
+          << " outputs but it produced " << size;
+    }
+  }
+
+  // This will _always_ compute something, unlike 'getValue' which simply
+  // returns an already computed reference if possible.
+  std::vector<Value*> emit(const TreeRef& tree, const size_t output_size = 0) {
+    switch (tree->kind()) {
+      case TK_IDENT:
+      case '.': {
+        return {getValue(tree)};
       } break;
       case TK_NE:
       case TK_EQ:
@@ -424,71 +220,49 @@ struct DefCompiler {
       case TK_AND:
       case TK_OR:
       case TK_NOT: {
-        // must be before add_op
-        auto values = getValues(tree->trees());
-        auto op = cur().add_op();
-        op->set_type(operatorName(tree->kind(), tree->trees().size()));
-        for (auto& v : values) {
-          op->add_input(v);
-        }
-        appendOutputs(tree, op, outputs, 1);
-        auto broadcast = op->add_arg();
-        broadcast->set_name("broadcast");
-        broadcast->set_i(1);
+        expectOutputs(tree, output_size, 1);
+        const auto& inputs = tree->trees();
+        auto kind = getKind(tree->kind(), inputs.size());
+        return emitNode(kind, getValues(inputs), {}, output_size);
       } break;
-      case TK_IF_EXPR: {
-        // TODO: add support for control flow ops
-      }
       case TK_APPLY: {
         auto apply = Apply(tree);
-        // Handle built-ins like zeros, ones, etc
-        if (builtins.count(apply.name().name()) > 0) {
-          builtins[apply.name().name()](this, apply, outputs);
-          break;
+        if (function_table.count(apply.name().name()) > 0) {
+          return emitFunctionCall(apply, output_size);
+        } else {
+          const auto& inputs = getValues(apply.inputs());
+          NodeKind kind{apply.name().name()};
+
+          std::unordered_map<std::string, TreeRef> attributes{};
+          for (const auto& attr : apply.attributes()) {
+              attributes[attr.name().name()] = attr.value();
+          }
+          return emitNode(kind, inputs, attributes, output_size);
         }
-        if (symbol_table.count(apply.name().name()) > 0) {
-          emitFunctionCall(apply, outputs);
-          break;
-        }
-        // TODO: do schema check here
-        emitNode(apply, outputs);
       } break;
       case TK_CAST: {
-        auto cast = Cast(tree);
-        auto c2type = getType(cast.type());
-        auto input = getValue(cast.input());
-        auto op = cur().add_op();
-        op->set_type("Cast");
-        op->add_input(input);
-        appendOutputs(tree, op, outputs, 1);
-        auto arg = op->add_arg();
-        arg->set_name("to");
-        arg->set_i(c2type);
+        const auto cast = Cast(tree);
+        return emitCast(cast.input(),
+                        cast.type());
       } break;
       case TK_CONST: {
-        expectOutputs(tree, outputs, 1);
-        emitConst(
-            tree->tree(0)->doubleValue(),
-            outputs[0],
-            tree->tree(1)->stringValue());
+        return emitConst(tree->tree(0)->doubleValue(),
+                         tree->tree(1)->stringValue());
+      } break;
+      case TK_SLICE: {
+        const auto slice = Slice(tree);
+        return emitSlice(slice.range(),
+                         {slice.value(), slice.startOr(0), slice.endOr(-1)},
+                         output_size);
       } break;
       case TK_GATHER: {
         const auto gather = Gather(tree);
-        desugarAndEmitOperator(
-            "Gather",
-            gather.range(),
-            {gather.value(), gather.indices()},
-            outputs);
-        break;
-      }
-      case TK_SLICE: {
-        const auto slice = Slice(tree);
-        desugarAndEmitOperator(
-            "Slice",
-            slice.range(),
-            {slice.value(), slice.startOr(0), slice.endOr(-1)},
-            outputs);
-        break;
+        return emitGather(gather.range(),
+                          {gather.value(), gather.indices()},
+                          output_size);
+      } break;
+      case TK_IF_EXPR: {
+        // TODO: add support for conditional
       }
       default:
         throw ErrorReport(tree) << "NYI: " << tree;
@@ -496,201 +270,143 @@ struct DefCompiler {
     }
   }
 
-  // Desugars constructs that are syntactic sugar and emits the corresponding
-  // operator invocation, e.g. tensor[indices] -> tensor.Gather(indices).
-  void desugarAndEmitOperator(
-      const std::string& operatorName,
-      const SourceRange& range,
-      TreeList&& inputs,
-      const std::vector<std::string>& outputs) {
-    const auto applyName = Ident::create(range, operatorName);
+  std::vector<Value*> emitCast(const TreeRef& input, const int type) {
+      return {};
+  }
+
+  std::vector<Value*> emitConst(const double val, const std::string& type) {
+      if (type == "f") {
+          return {createConstant(at::CPU(at::kFloat).scalarTensor(val))};
+      } else if (type == "LL") {
+          return {createConstant(at::CPU(at::kLong).scalarTensor(val))};
+      } else if (type == "b") {
+          return {createConstant(at::CPU(at::kByte).scalarTensor(val))};
+      } else if (type == "i") {
+          return {createConstant(at::CPU(at::kInt).scalarTensor(val))};
+      } else {
+        throw std::runtime_error("unknown const type " + type);
+      }
+  }
+
+  std::vector<Value*> emitNode(NodeKind kind,
+                               const std::vector<Value*> inputs,
+                               const std::unordered_map<std::string, TreeRef>& attributes,
+                               const size_t output_size) {
+      Node * n = def.graph->appendNode(def.graph->create(kind, output_size));
+      for (auto* input_value : inputs) {
+          n->addInput(input_value);
+      }
+      for (const auto& iter : attributes) {
+          const auto& name = Symbol(iter.first);
+          const auto& value = iter.second;
+          // TODO: handle non-float attributes
+          switch (value->kind()) {
+          case TK_CONST: {
+              auto v = value->tree(0)->doubleValue();
+              auto type = value->tree(1)->stringValue();
+              if (type == "f") {
+                  n->f_(name, v);
+              } else {
+                  n->i_(name, v);
+              }
+          } break;
+          case TK_LIST:
+              if (value->trees().size()) {
+                  std::vector<double> values{};
+                  for (const auto& tree : value->trees()) {
+                      values.push_back(tree->tree(0)->doubleValue());
+                  }
+                  if (value->trees()[0]->tree(1)->stringValue() == "f") {
+                      n->fs_(name, std::move(values));
+                  } else {
+                      n->is_(name, std::vector<int64_t>(values.begin(), values.end()));
+                  }
+              }
+              break;
+          }
+      }
+      return n->outputs();
+  }
+
+  // Desugars slice syntactic sugar tensor[begin:end] -> tensor.slice(begin, end).
+  std::vector<Value*> emitSlice(const SourceRange& range,
+                                TreeList&& inputs,
+                                const size_t output_size) {
     const auto applyInputs =
         Compound::create(TK_LIST, range, std::move(inputs));
     const auto applyAttributes = Compound::create(TK_LIST, range, {});
-    const auto apply =
-        Apply::create(range, applyName, applyInputs, applyAttributes);
-    emitOperator(Apply(apply), outputs);
+
+    return emitNode(kSlice, getValues(applyInputs->trees()), {}, output_size);
   }
 
-  TensorProto_DataType getType(int type) {
-    switch (type) {
-      case TK_INT:
-        return TensorProto_DataType_INT32;
-      case TK_FLOAT:
-        return TensorProto_DataType_FLOAT;
-      case TK_LONG:
-        return TensorProto_DataType_INT64;
-      case TK_BOOL:
-        return TensorProto_DataType_BOOL;
-      default:
-        throw std::runtime_error(
-            "expected type token: " + std::to_string(type));
-    }
+  // Desugars gather syntactic sugar tensor[indices] -> tensor.gather(indices).
+  std::vector<Value*> emitGather(const SourceRange& range,
+                                TreeList&& inputs,
+                                const size_t output_size) {
+      return {};
   }
 
-  OperatorDef* emitConst(
-      double v,
-      const std::string& output,
-      const std::string& type_ident) {
-    auto op = cur().add_op();
-    op->set_type("ConstantFill");
-    auto dtype = op->add_arg();
-    dtype->set_name("dtype");
-    auto value = op->add_arg();
-    value->set_name("value");
-    if (type_ident == "f") {
-      dtype->set_i(TensorProto_DataType_FLOAT);
-      value->set_f(v);
-    } else if (type_ident == "LL") {
-      dtype->set_i(TensorProto_DataType_INT64);
-      value->set_i(v);
-    } else if (type_ident == "b") {
-      dtype->set_i(TensorProto_DataType_BOOL);
-      value->set_i(v != 0);
-    } else if (type_ident == "i") {
-      dtype->set_i(TensorProto_DataType_INT32);
-      value->set_i(v);
-    } else {
-      throw std::runtime_error("unknown type_ident " + type_ident);
-    }
-    auto shape = op->add_arg();
-    shape->set_name("shape");
-    shape->add_ints(1);
-    op->add_output(output);
-    return op;
-  }
-  Graph& cur() {
-    return *graph_stack.back();
-  }
   FunctionDefinition& def; // the def being constructed
-  std::unordered_map<std::string, std::string>
-      env; // map from name in Def to name in Graph
-  std::vector<Graph*> graph_stack;
-  SymbolTable& symbol_table;
-  int next_fresh = 0;
+  FunctionTable& function_table;
+  ValueTable value_table;
 
- private:
-  void emitFillOp(const Apply& apply, const std::vector<std::string>& outputs) {
-    auto builtin_type = apply.name().name();
-    auto values = getValues(apply.inputs());
-    if (values.size() > 1) {
-      throw ErrorReport(apply)
-          << "Built-in " << builtin_type << " accepts 0 or 1 inputs.";
-    }
-    bool has_shape = false;
-    for (const auto& attribute : apply.attributes()) {
-      if (attribute.name().name() == "shape") {
-        has_shape = true;
-      } else {
-        throw ErrorReport(apply)
-            << "Unrecognized attribute " << attribute.name().name()
-            << " for built-in " << builtin_type;
-      }
-    }
-    if (builtin_type == "zeros" || builtin_type == "ones") {
-      if ((values.size() != 1) && !has_shape) {
-        throw ErrorReport(apply)
-            << "Built-in " << builtin_type
-            << " requires either 1 input or 1 shape attribute";
-      }
-    } else {
-      // zeros_like or ones_like
-      if (values.size() != 1) {
-        throw ErrorReport(apply)
-            << "Built-in " << builtin_type << " requires 1 input";
-      }
-    }
-
-    auto op = cur().add_op();
-    op->set_type("ConstantFill");
-    if (values.size()) {
-      op->add_input(values[0]);
-      auto* input_as_shape = op->add_arg();
-      input_as_shape->set_name("input_as_shape");
-      if (builtin_type.find("_like") != std::string::npos) {
-        // zeros_like, ones_like take the shape of the input as constant
-        // tensor shape
-        input_as_shape->set_i(0);
-      } else {
-        // zeros, ones take the values in the tensor as constant tensor
-        // shape
-        input_as_shape->set_i(1);
-      }
-    } else {
-      fillArg(op->add_arg(), apply.attributes()[0]);
-    }
-
-    auto value = op->add_arg();
-    value->set_name("value");
-    if (builtin_type.find("ones") != std::string::npos) {
-      value->set_f(1.0f);
-    } else {
-      value->set_f(0.0f);
-    }
-    appendOutputs(apply, op, outputs, 1);
+private:
+  Value* createConstant(const at::Tensor& val) {
+    return def.graph->appendNode(def.graph->createConstant(val))->output();
   }
-  // emitModule doesn't actually do anything except for allow
-  // statements like a = Module() to register 'a' as a valid identifier
-  // so that a.b = ... will work
-  void emitModule(const Apply& apply, const std::vector<std::string>& outputs) {
-    expectOutputs(apply, outputs, 1);
-  }
-  std::unordered_map<
-      std::string,
-      std::function<void(
-          DefCompiler*,
-          const Apply&,
-          const std::vector<std::string>& outputs)>>
-      builtins{{"zeros", &DefCompiler::emitFillOp},
-               {"zeros_like", &DefCompiler::emitFillOp},
-               {"ones", &DefCompiler::emitFillOp},
-               {"ones_like", &DefCompiler::emitFillOp},
-               {"Module", &DefCompiler::emitModule}};
 };
 
 struct CompilationUnitImpl {
   void defineFunction(const Def& def) {
-    if (functions.count(def.name().name()) > 0) {
-      throw ErrorReport(def) << def.name().name() << " already defined.";
+    const auto& name = def.name().name();
+
+    if (functions.count(name) > 0) {
+      throw ErrorReport(def) << name << " already defined.";
     }
-    DefCompiler c(
-        functions.emplace(def.name().name(), FunctionDefinition(def))
-            .first->second,
-        functions);
-    c.run();
+
+    auto inserted = functions.emplace(name, FunctionDefinition{def});
+    DefCompiler compiler(inserted.first->second, functions);
+    compiler.run();
   }
 
-  void define(const std::string& str) {
-    Parser p(str);
+  void define(const std::string& script) {
+    Parser p(script);
     while (p.lexer().cur().kind != TK_EOF) {
       defineFunction(Def(p.parseFunction()));
     }
   }
 
-  const Graph& getGraph(const std::string& str) {
-    if (functions.count(str) == 0)
-      throw ErrorReport() << "undefined function: " << str << "\n";
-    auto& def = functions.at(str);
+  const Graph& getGraph(const std::string& func_name) {
+    if (functions.count(func_name) == 0)
+      throw ErrorReport() << "undefined function: " << func_name << "\n";
+    auto& def = functions.at(func_name);
     return *def.graph;
   }
 
  private:
   friend struct DefCompiler;
-  SymbolTable functions;
+  FunctionTable functions;
 };
 
 CompilationUnit::CompilationUnit() : pImpl(new CompilationUnitImpl()) {}
 
-void CompilationUnit::define(const std::string& str) {
-  return pImpl->define(str);
+void CompilationUnit::define(const std::string& script) {
+  return pImpl->define(script);
 }
 
 const Graph& CompilationUnit::getGraph(
-    const std::string& str) {
-  return pImpl->getGraph(str);
+    const std::string& func_name) {
+  return pImpl->getGraph(func_name);
 }
 
 CompilationUnit::~CompilationUnit() {}
+
+
+std::unique_ptr<CompilationUnit> jitScriptCompile(const std::string& script) {
+    std::unique_ptr<CompilationUnit> cu{new CompilationUnit};
+    cu->define(script);
+    return cu;
+}
 
 } // namespace script
 } // namespace jit
