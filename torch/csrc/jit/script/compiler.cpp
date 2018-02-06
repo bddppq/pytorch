@@ -35,16 +35,21 @@ struct DefCompiler {
         function_table(function_table) {}
 
   // populate def->graph
-  void run() {
+  std::vector<Value*> run() {
     auto& tree = *def.tree;
     for (auto input : tree.params()) {
       auto& name = input.ident().name();
       map(name, def.graph->addInput(name));
     }
     emitStatements(tree.statements());
+
+    std::vector<Value*> output_values{};
     for (auto output : tree.returns()) {
-      def.graph->registerOutput(lookup(output.ident()));
+        auto* value = lookup(output.ident());
+        def.graph->registerOutput(value);
+        output_values.push_back(value);
     }
+    return output_values;
   }
   void emitStatements(const ListView<TreeRef>& statements) {
     for (auto stmt : statements) {
@@ -146,8 +151,6 @@ struct DefCompiler {
         return kle;
       case TK_GE:
         return kge;
-      case TK_IF_EXPR:
-        return k__if__;
       case TK_AND:
         return k__and__;
       case TK_OR:
@@ -186,7 +189,29 @@ struct DefCompiler {
   // emit a function call by inlining the function's Graph into our
   // Graph
   std::vector<Value*> emitFunctionCall(Apply& apply, const size_t output_size) {
-    return {};
+    auto& fn = function_table.at(apply.name().name());
+    std::vector<Value*> inputs = getValues(apply.inputs());
+
+    std::unordered_map<Value*, Value*> value_table;
+    auto value_map = [&](Value * v) {
+        return value_table.at(v);
+    };
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        value_table[fn.graph->inputs()[i]] = inputs[i];
+    }
+    for (auto* node : fn.graph->nodes()) {
+        auto* new_node = def.graph->appendNode(def.graph->createClone(node, value_map));
+        for (size_t i = 0; i < node->outputs().size(); ++i) {
+            value_table[node->outputs()[i]] = new_node->outputs()[i];
+            new_node->outputs()[i]->copyMetadata(node->outputs()[i]);
+        }
+    }
+
+    std::vector<Value*> outputs{};
+    for(auto* output : fn.graph->outputs()) {
+        outputs.push_back(value_map(output));
+    }
+    return outputs;
     // TODO: Add support for function call
   }
 
