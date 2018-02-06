@@ -72,13 +72,13 @@ struct ListView : public TreeView {
 template <typename T>
 struct OptionView : public TreeView {
   explicit OptionView(const TreeRef& tree) : TreeView(tree) {
-    C2S_ASSERT(tree, tree->kind() == TK_OPTION);
+    JIT_SCRIPT_ASSERT(tree, tree->kind() == TK_OPTION);
   }
   bool present() const {
     return tree_->trees().size() > 0;
   }
   T get() const {
-    C2S_ASSERT(tree_, present());
+    JIT_SCRIPT_ASSERT(tree_, present());
     return T(tree_->trees()[0]);
   }
   TreeRef map(std::function<TreeRef(const T&)> fn) {
