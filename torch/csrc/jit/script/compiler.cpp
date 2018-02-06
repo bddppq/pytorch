@@ -161,9 +161,11 @@ struct DefCompiler {
 
   Value* getValue(const TreeRef& tree) {
     switch (tree->kind()) {
-      case TK_IDENT:
-      case '.': {
+      case TK_IDENT: {
         return lookup(Ident(tree));
+      } break;
+      case '.': {
+        throw ErrorReport(tree) << "Not supported yet: " << tree;
       } break;
       default: {
         const auto outputs = emit(tree, 1);
@@ -203,8 +205,7 @@ struct DefCompiler {
   // returns an already computed reference if possible.
   std::vector<Value*> emit(const TreeRef& tree, const size_t output_size = 0) {
     switch (tree->kind()) {
-      case TK_IDENT:
-      case '.': {
+      case TK_IDENT: {
         return {getValue(tree)};
       } break;
       case TK_NE:
@@ -261,9 +262,10 @@ struct DefCompiler {
                           {gather.value(), gather.indices()},
                           output_size);
       } break;
-      case TK_IF_EXPR: {
+      case '.':
+          // TODO: add support for "."
+      case TK_IF_EXPR:
         // TODO: add support for conditional
-      }
       default:
         throw ErrorReport(tree) << "NYI: " << tree;
         break;
@@ -271,6 +273,7 @@ struct DefCompiler {
   }
 
   std::vector<Value*> emitCast(const TreeRef& input, const int type) {
+      // TODO: add support for conditional
       return {};
   }
 
