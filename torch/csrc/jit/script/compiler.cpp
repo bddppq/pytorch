@@ -364,14 +364,17 @@ struct DefCompiler {
         Compound::create(TK_LIST, range, std::move(inputs));
     const auto applyAttributes = Compound::create(TK_LIST, range, {});
 
-    return emitNode(kSlice, getValues(applyInputs->trees()), {}, output_size);
+    return emitNode(Symbol("slice"), getValues(applyInputs->trees()), {}, output_size);
   }
 
   // Desugars gather syntactic sugar tensor[indices] -> tensor.gather(indices).
   std::vector<Value*> emitGather(const SourceRange& range,
                                 TreeList&& inputs,
                                 const size_t output_size) {
-      return {};
+    const auto applyInputs =
+        Compound::create(TK_LIST, range, std::move(inputs));
+    const auto applyAttributes = Compound::create(TK_LIST, range, {});
+    return emitNode(Symbol("gather"), getValues(applyInputs->trees()), {}, output_size);
   }
 
   FunctionDefinition& def; // the def being constructed
