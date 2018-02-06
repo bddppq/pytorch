@@ -322,11 +322,48 @@ def smoothl1loss_reference(input, target, size_average=True, reduce=True):
     return output
 
 
+def _multilabelmarginloss_reference(input, target):
+    targets = []
+    for target_index in target:
+        if target_index < 0:
+            break
+        targets.append(target_index)
+
+    sum = 0
+    for target_index in targets:
+        for i in range(0, len(input)):
+            if i not in targets:
+                sum += max(0, 1 - input[target_index] + input[i])
+
+    return sum
+
+
+def multilabelmarginloss_reference(input, target, size_average=True, reduce=True):
+    if input.dim() == 1:
+        n = 1
+        dim = input.size(0)
+        output = torch.zeros(n)
+        output[0] = _multilabelmarginloss_reference(input, target)
+    else:
+        n = input.size(0)
+        dim = input.size(1)
+        output = torch.zeros(n)
+        for i in range(0, n):
+            output[i] = _multilabelmarginloss_reference(input[i], target[i])
+
+    if reduce and size_average:
+        return output.mean() / dim
+    elif reduce:
+        return output.sum() / dim
+    return output / dim
+
+
 loss_reference_fns = {
     'KLDivLoss': kldivloss_reference,
     'NLLLoss': nllloss_reference,
     'NLLLossNd': nlllossNd_reference,
     'SmoothL1Loss': smoothl1loss_reference,
+    'MultiLabelMarginLoss': multilabelmarginloss_reference,
 }
 
 
@@ -441,8 +478,20 @@ criterion_tests = [
     ),
     dict(
         module_name='MultiLabelMarginLoss',
+        input_size=(10,),
+        target_fn=lambda: torch.rand(10).mul(10).floor().long(),
+        reference_fn=lambda i, t, m:
+            multilabelmarginloss_reference(i, t, size_average=get_size_average(m)),
+        desc="1d",
+        check_no_size_average=True,
+        check_gradgrad=False,
+    ),
+    dict(
+        module_name='MultiLabelMarginLoss',
         input_size=(5, 10),
         target_fn=lambda: torch.rand(5, 10).mul(10).floor().long(),
+        reference_fn=lambda i, t, m:
+            multilabelmarginloss_reference(i, t, size_average=get_size_average(m)),
         check_no_size_average=True,
         check_gradgrad=False,
     ),
@@ -723,6 +772,7 @@ class ModuleTest(TestBase):
         self.check_gradgrad = kwargs.get('check_gradgrad', True)
         self.FIXME_no_cuda_gradgrad_comparison = \
             kwargs.get('FIXME_no_cuda_gradgrad_comparison', False)
+        self.precision = kwargs.get('precision', 2e-4)
 
     def __call__(self, test_case):
         module = self.constructor(*self.constructor_args)
@@ -819,7 +869,7 @@ class ModuleTest(TestBase):
             test_case._zero_grad_parameters(gpu_module)
             cpu_output = test_case._forward(cpu_module, cpu_input)
             gpu_output = test_case._forward(gpu_module, gpu_input)
-            test_case.assertEqual(cpu_output, gpu_output, 2e-4)
+            test_case.assertEqual(cpu_output, gpu_output, self.precision)
 
             # Run backwards on CPU and GPU and compare results
             for i in range(5):
@@ -828,9 +878,9 @@ class ModuleTest(TestBase):
                 gpu_gradOutput = cpu_gradOutput.type('torch.cuda.FloatTensor')
                 cpu_gradInput = test_case._backward(cpu_module, cpu_input, cpu_output, cpu_gradOutput)
                 gpu_gradInput = test_case._backward(gpu_module, gpu_input, gpu_output, gpu_gradOutput)
-                test_case.assertEqual(cpu_gradInput, gpu_gradInput, 2e-4)
+                test_case.assertEqual(cpu_gradInput, gpu_gradInput, self.precision)
                 for cpu_d_p, gpu_d_p in zip(cpu_param[1], gpu_param[1]):
-                    test_case.assertEqual(cpu_d_p, gpu_d_p, 2e-4)
+                    test_case.assertEqual(cpu_d_p, gpu_d_p, self.precision)
 
             # Run double-backwards on CPU and GPU and compare results
             if self.check_gradgrad and not self.FIXME_no_cuda_gradgrad_comparison:
@@ -852,7 +902,7 @@ class ModuleTest(TestBase):
                     create_graph=True)
 
                 for cpu_d_i, gpu_d_i in zip(cpu_gradInputs, gpu_gradInputs):
-                    test_case.assertEqual(cpu_d_i, gpu_d_i, 2e-4)
+                    test_case.assertEqual(cpu_d_i, gpu_d_i, self.precision)
 
                 # We mix output into the second backwards computation so that
                 # torch.autograd.grad doesn't complain that some inputs
@@ -867,9 +917,9 @@ class ModuleTest(TestBase):
                     (gpu_input, gpu_gradOutput) + tuple(gpu_module.parameters()),
                     retain_graph=True)
 
-                test_case.assertEqual(cpu_gradInput, gpu_gradInput, 2e-4)
+                test_case.assertEqual(cpu_gradInput, gpu_gradInput, self.precision)
                 for cpu_d_p, gpu_d_p in zip(cpu_gg, gpu_gg):
-                    test_case.assertEqual(cpu_d_p, gpu_d_p, 2e-4)
+                    test_case.assertEqual(cpu_d_p, gpu_d_p, self.precision)
 
             self.test_noncontig(test_case, gpu_module, gpu_input)
         except NotImplementedError:

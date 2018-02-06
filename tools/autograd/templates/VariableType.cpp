@@ -201,6 +201,12 @@ std::vector<at::Tensor> VariableType::unpack(at::TensorList tl, const char *name
   return ret;
 }
 
+// Assumed that saved tensor lists are never inplace outputs
+static std::vector<SavedVariable> make_saved_variable_list(TensorList tensors) {
+  return fmap(tensors, [](const Tensor& tensor) -> SavedVariable {
+      return SavedVariable{tensor, false /* is output */}; });
+}
+
 static Tensor as_variable(Tensor tensor) {
   return make_variable(std::move(tensor));
 }
@@ -227,6 +233,17 @@ as_variable(std::tuple<Tensor, Tensor, Tensor, Tensor> tensors) {
       make_variable(std::move(std::get<1>(tensors))),
       make_variable(std::move(std::get<2>(tensors))),
       make_variable(std::move(std::get<3>(tensors))));
+}
+
+static std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor>
+as_variable(std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> tensors) {
+  return std::make_tuple<>(
+      make_variable(std::move(std::get<0>(tensors))),
+      make_variable(std::move(std::get<1>(tensors))),
+      make_variable(std::move(std::get<2>(tensors))),
+      make_variable(std::move(std::get<3>(tensors))),
+      make_variable(std::move(std::get<4>(tensors)))
+      );
 }
 
 static std::vector<Tensor> as_variable(TensorList tl) {
@@ -283,12 +300,6 @@ static void check_no_requires_grad(const Tensor& tensor, const char* name) {
   }
 }
 
-// NB: This should be called with Tensor/TensorList arguments (not Variables)
-template <typename... Args>
-static function_list compute_next_functions(Args&&... args) {
-  return Function::tensor_flags(std::forward<Args>(args)...).next_functions;
-}
-
 static void check_inplace(const Tensor& tensor) {
   auto& var = static_cast<const Variable&>(tensor);
   if (var.requires_grad() && var.is_leaf() && GradMode::is_enabled()) {
@@ -319,8 +330,8 @@ static void rebase_history(TensorList tensors, std::shared_ptr<Function> grad_fn
       if (tensor.defined()) {
         auto& var = static_cast<Variable&>(const_cast<Tensor&>(tensor));
         var.rebase_history(output_nr, grad_fn);
-        output_nr++;
       }
+      output_nr++;
     }
   }
 }
@@ -345,8 +356,8 @@ static void set_history(TensorList tensors, std::shared_ptr<Function> grad_fn) {
         auto& var = static_cast<Variable&>(const_cast<Tensor&>(tensor));
         var.get()->output_nr = output_nr;
         var.get()->_grad_fn = grad_fn;
-        output_nr++;
       }
+      output_nr++;
     }
   }
 }
@@ -376,7 +387,7 @@ static bool isFloatingPoint(ScalarType s) {
   return s == kFloat || s == kDouble || s == kHalf;
 }
 
-Tensor & VariableType::s_copy_(Tensor & self, const Tensor & src, bool async) const {
+Tensor & VariableType::s_copy_(Tensor & self, const Tensor & src, bool non_blocking) const {
   // TODO: once copy is exposed in Declarations.yaml we may be able to bind
   // it automatically
   auto& self_ = unpack(self, "self", 0);
@@ -387,12 +398,12 @@ Tensor & VariableType::s_copy_(Tensor & self, const Tensor & src, bool async) co
   requires_grad &= isFloatingPoint(self.type().scalarType());
   if (requires_grad) {
     grad_fn = std::make_shared<CopyBackwards>();
-    grad_fn->next_functions = compute_next_functions( self, src );
+    grad_fn->next_functions = get_next_functions(self, src);
     grad_fn->num_inputs = 1;
     grad_fn->src_type = &src.type();
     grad_fn->src_device = src.is_cuda() ? src.get_device() : -1;
   }
-  baseType->s_copy_(self_, src_, async);
+  baseType->s_copy_(self_, src_, non_blocking);
   increment_version(self);
   rebase_history(self, std::move(grad_fn));
   return self;
