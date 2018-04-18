@@ -24,6 +24,13 @@ OPERATOR_SCHEMA(ReduceSum)
     .Input(0, "data", "An input tensor.")
     .Output(0, "reduced", "Reduced output tensor.");
 
+OPERATOR_SCHEMA(ReduceSumGradient)
+    .NumInputs(1)
+    .NumOutputs(1);
+
+OPERATOR_SCHEMA(ReduceMeanGradient)
+    .NumInputs(1)
+    .NumOutputs(1);
 
 REGISTER_CPU_OPERATOR(ReduceMean, ReduceMeanOp<float, CPUContext>);
 REGISTER_CPU_OPERATOR(
