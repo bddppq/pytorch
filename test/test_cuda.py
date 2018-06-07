@@ -3,11 +3,13 @@ import math
 import tempfile
 import re
 import unittest
+import sys
 from itertools import repeat
 
 import torch
 import torch.cuda
 import torch.cuda.comm as comm
+from torch import multiprocessing as mp
 
 from test_torch import TestTorch
 from common import TestCase, get_gpu_type, to_gpu, freeze_rng_state, run_tests, PY3
@@ -1399,6 +1401,34 @@ class TestCuda(TestCase):
         sample = torch.multinomial(freqs, 1000, True)
         self.assertNotEqual(freqs[sample].min(), 0)
 
+    def _spawn_method(self, method, arg):
+        try:
+            mp.set_start_method('spawn')
+        except RuntimeError:
+            pass
+        with mp.Pool(1) as pool:
+            self.assertTrue(pool.map(method, [arg]))
+
+    @staticmethod
+    def _test_multinomial_invalid_probs_cuda(probs):
+        try:
+            with torch.random.fork_rng(devices=[0]):
+                torch.multinomial(probs.to('cuda'), 1)
+                torch.cuda.synchronize()
+            return False  # Should not be reached
+        except RuntimeError as e:
+            return 'device-side assert triggered' in str(e)
+
+    @unittest.skipIf(not PY3,
+                     "spawn start method is not supported in Python 2, \
+                     but we need it for creating another process with CUDA")
+    def test_multinomial_invalid_probs_cuda(self):
+        test_method = TestCuda._test_multinomial_invalid_probs_cuda
+        self._spawn_method(test_method, torch.Tensor([0, -1]))
+        self._spawn_method(test_method, torch.Tensor([0, float('inf')]))
+        self._spawn_method(test_method, torch.Tensor([0, float('-inf')]))
+        self._spawn_method(test_method, torch.Tensor([0, float('nan')]))
+
     def test_broadcast(self):
         TestTorch._test_broadcast(self, lambda t: t.cuda())
 
@@ -1652,6 +1682,41 @@ class TestCuda(TestCase):
         torch.cuda.nvtx.range_push("foo")
         torch.cuda.nvtx.mark("bar")
         torch.cuda.nvtx.range_pop()
+
+    def test_randperm_cuda(self):
+        cuda = torch.device('cuda:0')
+
+        # For small inputs, randperm is offloaded to CPU instead
+        with torch.random.fork_rng(devices=[0]):
+            res1 = torch.randperm(100, device=cuda)
+        res2 = torch.cuda.LongTensor()
+        torch.randperm(100, out=res2, device=cuda)
+        self.assertEqual(res1, res2, 0)
+
+        with torch.random.fork_rng(devices=[0]):
+            res1 = torch.randperm(100000, device=cuda)
+        res2 = torch.cuda.LongTensor()
+        torch.randperm(100000, out=res2, device=cuda)
+        self.assertEqual(res1, res2, 0)
+
+        with torch.random.fork_rng(devices=[0]):
+            res1 = torch.randperm(100, dtype=torch.half, device=cuda)
+        res2 = torch.cuda.HalfTensor()
+        torch.randperm(100, out=res2, device=cuda)
+        self.assertEqual(res1, res2, 0)
+
+        with torch.random.fork_rng(devices=[0]):
+            res1 = torch.randperm(50000, dtype=torch.half, device=cuda)
+        res2 = torch.cuda.HalfTensor()
+        torch.randperm(50000, out=res2, device=cuda)
+        self.assertEqual(res1, res2, 0)
+
+        # randperm of 0 elements is an empty tensor
+        res1 = torch.randperm(0, device=cuda)
+        res2 = torch.cuda.LongTensor(5)
+        torch.randperm(0, out=res2, device=cuda)
+        self.assertEqual(res1.numel(), 0)
+        self.assertEqual(res2.numel(), 0)
 
     def test_random_neg_values(self):
         TestTorch._test_random_neg_values(self, use_cuda=True)

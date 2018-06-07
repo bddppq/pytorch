@@ -57,8 +57,11 @@ cmake_dependent_option(
     CAFFE2_USE_MSVC_STATIC_RUNTIME "Using MSVC static runtime libraries" ON
     "NOT BUILD_SHARED_LIBS" OFF)
 cmake_dependent_option(
-    BUILD_TEST "Build Caffe2 C++ test binaries (need gtest and gbenchmark)" ON
+    BUILD_TEST "Build Caffe2 C++ test binaries (need gtest and gbenchmark)" OFF
     "BUILD_CAFFE2" OFF)
+cmake_dependent_option(
+    INSTALL_TEST "Install test binaries if BUILD_TEST is on" OFF
+    "BUILD_TEST" OFF)
 option(USE_ACL "Use ARM Compute Library" OFF)
 option(USE_ASAN "Use Address Sanitizer" OFF)
 option(USE_ATEN "Use ATen" OFF)
@@ -281,6 +284,9 @@ include_directories(BEFORE ${PROJECT_BINARY_DIR})
 if(BUILD_CAFFE2)
   add_subdirectory(caffe/proto)
 endif()
+
+# ---[ Shared build
+add_subdirectory(c10)
 
 # ---[ Main build
 add_subdirectory(caffe2)
