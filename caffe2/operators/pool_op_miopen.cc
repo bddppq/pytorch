@@ -144,6 +144,7 @@ class MIOPENPoolOp : public ConvPoolOpBase<HIPContext>
     bool do_backward_;
     const float alpha_;
     const float beta_;
+    char* poolWs_{nullptr};
 };
 
 class MIOPENPoolGradientOp : public ConvPoolOpBase<HIPContext>
@@ -306,6 +307,7 @@ class MIOPENPoolGradientOp : public ConvPoolOpBase<HIPContext>
     const float alpha_;
     const float beta_;
     float* bwdPoolScratch_;
+    char* poolWs_{nullptr};
 };
 
 namespace {

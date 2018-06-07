@@ -28,6 +28,13 @@ with extension_loader.DlopenGuard():
                 'Cannot load caffe2.python. Error: {0}'.format(str(e)))
             sys.exit(1)
 
+    try:
+        from caffe2.python.caffe2_pybind11_state_hip import *  # noqa
+    except ImportError as e:
+        has_hip_support = True
+    else:
+        has_hip_support = False
+
 # libcaffe2_python contains a global Workspace that we need to properly delete
 # when exiting. Otherwise, cudart will cause segfaults sometimes.
 atexit.register(on_module_exit)  # noqa

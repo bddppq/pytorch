@@ -243,12 +243,9 @@ endif()
 # ---[ Caffe2 HIP sources.
 if(BUILD_CAFFE2)
   if(USE_ROCM)
-    set(Caffe2_HIP_CXX_FLAGS "-D__HIP_PLATFORM_HCC__=1")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Caffe2_HIP_CXX_FLAGS}")
     HIP_ADD_LIBRARY(caffe2_hip ${Caffe2_HIP_SRCS})
     set_target_properties(caffe2_hip PROPERTIES COMPILE_FLAGS ${Caffe2_HIP_CXX_FLAGS})
 
-    list(APPEND Caffe2_HIP_DEPENDENCY_LIBS rocrand hiprand rocblas MIOpen)
     target_include_directories(
       caffe2_hip PUBLIC ${Caffe2_HIP_INCLUDES})
     target_include_directories(
@@ -405,7 +402,7 @@ if(BUILD_CAFFE2)
       install(TARGETS caffe2_pybind11_state_gpu DESTINATION "${PYTHON_LIB_REL_PATH}/caffe2/python")
     endif()
 
-    if(USE_HIP)
+    if(USE_ROCM)
       add_library(caffe2_pybind11_state_hip MODULE ${Caffe2_HIP_PYTHON_SRCS})
       set_target_properties(caffe2_pybind11_state_hip PROPERTIES COMPILE_FLAGS "-fvisibility=hidden")
       set_target_properties(caffe2_pybind11_state_hip PROPERTIES PREFIX "")
@@ -441,6 +438,14 @@ if(BUILD_CAFFE2)
             TARGET windows_python_copy_lib POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
             $<TARGET_FILE:caffe2_pybind11_state_gpu>
+            ${CMAKE_BINARY_DIR}/caffe2/python)
+      endif()
+      if (USE_ROCM)
+        add_dependencies(windows_python_copy_lib caffe2_pybind11_state_hip)
+        add_custom_command(
+            TARGET windows_python_copy_lib POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:caffe2_pybind11_state_hip>
             ${CMAKE_BINARY_DIR}/caffe2/python)
       endif()
     endif()
