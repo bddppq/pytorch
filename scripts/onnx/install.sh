@@ -30,11 +30,8 @@ _pip_install() {
 }
 
 pip install -r "$top_dir/caffe2/requirements.txt"
-python setup_caffe2.py install
+pip install -r "$top_dir/requirements.txt"
+FULL_CAFFE2=1 python setup.py install
 
 # Install onnx
 _pip_install -b "$BUILD_DIR/onnx" "file://$tp2_dir/onnx#egg=onnx"
-
-# Install pytorch
-pip install -r "$top_dir/requirements.txt"
-_pip_install -b "$BUILD_DIR/pytorch" "file://$top_dir#egg=torch"
