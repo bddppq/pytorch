@@ -1396,6 +1396,22 @@ class TestJit(JitTestCase):
         self.run_pass('constant_propagation', constant_prop.graph)
         self.assertExpected(canonical(constant_prop.graph))
 
+    def test_trace_detach(self):
+        @torch.jit.trace(torch.rand(3, 4), torch.rand(4, 5))
+        def foo(x, w):
+            return torch.matmul(x, w).detach()
+
+        self.assertExpected(foo.graph)
+
+    def test_trace_detach_inplace(self):
+        @torch.jit.trace(torch.rand(3, 4), torch.rand(4, 5))
+        def foo(x, w):
+            y = torch.matmul(x, w)
+            y.detach_()
+            return y
+
+        self.assertExpected(foo.graph)
+
 
 class TestBatched(TestCase):
     # generate random examples and create an batchtensor with them

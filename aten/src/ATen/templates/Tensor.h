@@ -212,13 +212,6 @@ struct AT_API Tensor : public detail::TensorBase {
     return tensor_impl_->grad();
   }
 
-  Tensor detach() const {
-    return tensor_impl_->detach();
-  }
-  void detach_() {
-    tensor_impl_->detach_();
-  }
-
   void set_data(Tensor new_data) {
     tensor_impl_->set_data(new_data);
   }
