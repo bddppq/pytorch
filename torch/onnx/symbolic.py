@@ -151,7 +151,7 @@ def _unimplemented(op, msg):
 # increasing this number.  This includes symbolic definitions NOT in this
 # file, so grep for "OpName" (with quotes)
 
-_onnx_opset_version = 7
+_onnx_opset_version = 8
 
 
 # ---------------------------------------------------------------------
@@ -327,9 +327,10 @@ def t(g, self):
     return g.op("Transpose", self, perm_i=(1, 0))
 
 
-# There is no translation for it, but we don't want to raise an error yet
 def expand(g, self, size, implicit):
-    return None
+    if not _is_value(size):
+        size = g.op("Constant", value_t=torch.LongTensor(size))
+    return g.op('Expand', self, size)
 
 
 def embedding(g, weight, indices, padding_idx, scale_grad_by_freq, sparse):

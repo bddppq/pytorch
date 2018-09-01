@@ -55,11 +55,6 @@ void validateGraph(const std::shared_ptr<Graph>& graph, onnx_torch::OperatorExpo
           "\n\nDefined at:\n" + getNodeStackTraceString(node))
     IR_ELSE()
       // Special error messages for certain types of operators
-      if (node->kind() == aten::expand) {
-        FAIL_EXPORT(
-            "Could not export a broadcasted operation; ONNX likely does not support this form of broadcasting.\n\nBroadcast occurred at:\n" +
-            getNodeStackTraceString(node));
-      }
       if (node->kind() == prim::PackPadded || node->kind() == prim::PadPacked) {
         FAIL_EXPORT(
             "Cannot export individual pack_padded_sequence or pad_packed_sequence; these operations must occur in pairs.\n\nUsage of this operation occurred at:\n" +
