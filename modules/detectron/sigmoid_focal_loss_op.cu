@@ -17,11 +17,13 @@
 #include <cfloat>
 
 #include "caffe2/core/context_gpu.h"
-#include "sigmoid_focal_loss_op.h"
+#include "modules/detectron/sigmoid_focal_loss_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
 
 __global__ void SigmoidFocalLossKernel(
     const int N, const int D, const int H, const int W, const float* logits,

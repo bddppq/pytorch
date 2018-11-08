@@ -363,7 +363,6 @@ endif()
 
 # ---[ Caffe2 HIP sources.
 if(USE_ROCM)
-  # Call again since Caffe2_HIP_INCLUDES is extended with ATen include dirs.
   # Get Compile Definitions from the directory (FindHIP.cmake bug)
   get_directory_property(MY_DEFINITIONS COMPILE_DEFINITIONS)
   if(MY_DEFINITIONS)
@@ -375,26 +374,11 @@ if(USE_ROCM)
   # Call again since Caffe2_HIP_INCLUDES is extended with ATen include dirs.
   hip_include_directories(${Caffe2_HIP_INCLUDES})
 
-  filter_list(__caffe2_hip_srcs_cpp Caffe2_HIP_SRCS "\\.(cc|cpp|cu)$")
-  set_source_files_properties(${__caffe2_hip_srcs_cpp} PROPERTIES HIP_SOURCE_PROPERTY_FORMAT 1)
-
-  # FindHIP.CMake checks if the SHARED flag is set and adds extra logic accordingly.
-  hip_add_library(caffe2_hip ${Caffe2_HIP_SRCS})
-
-  # Since PyTorch files contain HIP headers, these flags are required for the necessary definitions to be added.
-  target_compile_options(caffe2_hip PRIVATE ${HIP_HIPCC_FLAGS})
+  caffe2_hip_add_library(caffe2_hip ${Caffe2_HIP_SRCS})
   target_link_libraries(caffe2_hip PUBLIC caffe2)
-  target_link_libraries(caffe2_hip PUBLIC ${Caffe2_HIP_DEPENDENCY_LIBS})
-
-  # Since PyTorch files contain HIP headers, this is also needed to capture the includes.
-  target_include_directories(caffe2_hip PRIVATE ${Caffe2_HIP_INCLUDES})
-  target_include_directories(caffe2_hip INTERFACE $<INSTALL_INTERFACE:include>)
 
   # Set standard properties on the target
   torch_set_target_props(caffe2_hip)
-
-  # When a library has object files that contain device code, it needs to use hipcc/hcc to link.
-  set_target_properties(caffe2_hip PROPERTIES LINKER_LANGUAGE HIP)
 
   caffe2_interface_library(caffe2_hip caffe2_hip_library)
   list(APPEND Caffe2_MAIN_LIBS caffe2_hip_library)
@@ -559,8 +543,7 @@ if (BUILD_PYTHON)
   endif()
 
   if(USE_ROCM)
-    hip_add_library(caffe2_pybind11_state_hip MODULE ${Caffe2_HIP_PYTHON_SRCS})
-    set_target_properties(caffe2_pybind11_state_hip PROPERTIES LINKER_LANGUAGE HIP)
+    add_library(caffe2_pybind11_state_hip MODULE ${Caffe2_HIP_PYTHON_SRCS})
     target_compile_options(caffe2_pybind11_state_hip PRIVATE ${HIP_HIPCC_FLAGS} -fvisibility=hidden)
     set_target_properties(caffe2_pybind11_state_hip PROPERTIES PREFIX "")
     set_target_properties(caffe2_pybind11_state_hip PROPERTIES SUFFIX ${PY_EXT_SUFFIX})
@@ -569,6 +552,7 @@ if (BUILD_PYTHON)
     endif()
     target_include_directories(caffe2_pybind11_state_hip PRIVATE $<INSTALL_INTERFACE:include>)
     target_include_directories(caffe2_pybind11_state_hip PRIVATE ${Caffe2_CPU_INCLUDE})
+    target_include_directories(caffe2_pybind11_state_hip PRIVATE ${Caffe2_HIP_INCLUDE})
     target_link_libraries(
         caffe2_pybind11_state_hip caffe2_library caffe2_hip_library)
     if (WIN32)

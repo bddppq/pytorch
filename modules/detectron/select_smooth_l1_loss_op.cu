@@ -15,11 +15,14 @@
  */
 
 #include "caffe2/core/context_gpu.h"
-#include "select_smooth_l1_loss_op.h"
+#include "modules/detectron/select_smooth_l1_loss_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
+
 __global__ void SelectSmoothL1Kernel(
     const int D, const int H, const int W,
     const int M, const float* Y_hat, const float* Y, const float* L, float* out,

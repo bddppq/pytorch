@@ -17,11 +17,13 @@
 #include <cfloat>
 
 #include "caffe2/core/context_gpu.h"
-#include "group_spatial_softmax_op.h"
+#include "modules/detectron/group_spatial_softmax_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
 
 __global__ void GroupSpatialSoftmaxKernel(const int num, const int A, const int W,
     const int H, const float* Xdata, float* Pdata, const int num_classes) {

@@ -23,6 +23,7 @@ includes = [
     "caffe2/core/*",
     "caffe2/db/*",
     "caffe2/utils/*",
+    "modules/detectron/*",
 ]
 
 ignores = [

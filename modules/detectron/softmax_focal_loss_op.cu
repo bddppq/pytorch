@@ -17,11 +17,13 @@
 #include <cfloat>
 
 #include "caffe2/core/context_gpu.h"
-#include "softmax_focal_loss_op.h"
+#include "modules/detectron/softmax_focal_loss_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
 
 __global__ void SpatialSoftmaxKernel(const int N, const int A,
     const int H, const int W, const float* Xdata, float* Pdata,

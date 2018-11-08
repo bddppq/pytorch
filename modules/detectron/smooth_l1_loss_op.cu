@@ -15,11 +15,14 @@
  */
 
 #include "caffe2/core/context_gpu.h"
-#include "smooth_l1_loss_op.h"
+#include "modules/detectron/smooth_l1_loss_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
+
 template <typename T>
 __global__ void SmoothL1Kernel(
     const int n, const T* in, T* out, T beta) {

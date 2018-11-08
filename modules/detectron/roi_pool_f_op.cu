@@ -17,11 +17,13 @@
 #include <cfloat>
 
 #include "caffe2/core/context_gpu.h"
-#include "roi_pool_f_op.h"
+#include "modules/detectron/roi_pool_f_op.h"
 
 namespace caffe2 {
 
 namespace {
+
+using c10::cuda::compat;
 
 template <typename T>
 inline __device__ T gpu_atomic_add(const T val, T* address);

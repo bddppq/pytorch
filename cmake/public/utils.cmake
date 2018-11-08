@@ -134,6 +134,30 @@ function(caffe2_hip_binary_target target_name_or_src)
   install(TARGETS ${__target} DESTINATION bin)
 endfunction()
 
+function(caffe2_hip_add_library target type_or_src)
+  if("x${type_or_src}" STREQUAL "xSTATIC" OR
+     "x${type_or_src}" STREQUAL "xSHARED" OR
+     "x${type_or_src}" STREQUAL "xMODULE")
+   set(__type "${type_or_src}")
+   set(__srcs "${ARGN}")
+ else()
+   set(__type "")
+   set(__srcs "${type_or_src}" "${ARGN}")
+ endif()
+
+  filter_list(__cpp __srcs "\\.(cc|cpp|cu)$")
+  set_source_files_properties(${__cpp} PROPERTIES HIP_SOURCE_PROPERTY_FORMAT 1)
+  hip_add_library(${target} ${__type} ${__srcs})
+
+  target_compile_options(${target} PRIVATE ${HIP_HIPCC_FLAGS})
+  target_link_libraries(${target} PUBLIC ${Caffe2_HIP_DEPENDENCY_LIBS})
+
+  target_include_directories(${target} PRIVATE ${Caffe2_HIP_INCLUDES})
+  target_include_directories(${target} INTERFACE $<INSTALL_INTERFACE:include>)
+
+  set_target_properties(${target} PROPERTIES LINKER_LANGUAGE HIP)
+endfunction()
+
 ##############################################################################
 # Multiplex between loading executables for CUDA versus HIP (AMD Software Stack).
 # Usage:
