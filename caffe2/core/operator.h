@@ -1175,12 +1175,12 @@ C10_DECLARE_REGISTRY(FunctionSchemaRegistry, FunctionSchemaStorageBase);
   static CAFFE2_STRUCT_OP_REGISTRATION_##name                        \
       CAFFE2_STRUCT_OP_REGISTRATION_DEFN_##name;
 
-#define DECLARE_FUNCTION_SCHEMA_OPERATOR(name)  \
-  void CAFFE2_MEYERS_OP_REGISTRATION_##name();  \
-  struct CAFFE2_STRUCT_OP_REGISTRATION_##name { \
-    CAFFE2_STRUCT_OP_REGISTRATION_##name() {    \
-      CAFFE2_MEYERS_OP_REGISTRATION_##name();   \
-    }                                           \
+#define DECLARE_FUNCTION_SCHEMA_OPERATOR(name)             \
+  CAFFE2_API void CAFFE2_MEYERS_OP_REGISTRATION_##name();  \
+  struct CAFFE2_API CAFFE2_STRUCT_OP_REGISTRATION_##name { \
+    CAFFE2_STRUCT_OP_REGISTRATION_##name() {               \
+      CAFFE2_MEYERS_OP_REGISTRATION_##name();              \
+    }                                                      \
   };
 
 #define GET_FUNCTION_SCHEMA(name) \
