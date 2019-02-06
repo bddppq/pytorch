@@ -317,6 +317,9 @@ if (MSVC)
 endif()
 
 target_link_libraries(torch caffe2_library)
+if(USE_FBGEMM)
+  target_link_libraries(torch fbgemm)
+endif()
 
 find_package(OpenMP QUIET)
 if(OPENMP_FOUND)

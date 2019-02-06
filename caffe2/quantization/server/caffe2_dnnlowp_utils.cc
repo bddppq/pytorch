@@ -24,16 +24,16 @@ using namespace std;
 using namespace caffe2;
 using int8::Int8TensorCPU;
 
-static bool HasDNNLowPEngine_(const OperatorDef& op_def) {
+static bool HasDNNLowPEngine_(const std::string& engine) {
   const string ENGINE_PREFIX = "DNNLOWP";
   return strncmp(
-             op_def.engine().c_str(),
+             engine.c_str(),
              ENGINE_PREFIX.c_str(),
              ENGINE_PREFIX.size()) == 0;
 }
 
 static bool HasDNNLowPEngine_(const OperatorBase& op) {
-  return HasDNNLowPEngine_(op.debug_def());
+  return HasDNNLowPEngine_(op.engine());
 }
 
 void PropagateOutputTensorQuantizationParams(
@@ -330,9 +330,76 @@ static unique_ptr<QuantizationFactory> GetQuantizationFactoryOf_(
       StringToKind(weight_quantization_kind)));
 }
 
+static unique_ptr<QuantizationFactory> GetQuantizationFactoryOf_(
+    const OperatorBase* op) {
+  int activation_precision =
+      op->GetSingleArgument<int>(
+          "activation_precision",
+          FLAGS_caffe2_dnnlowp_activation_quantization_precision);
+  int weight_precision = op->GetSingleArgument<int>(
+      "weight_precision",
+      FLAGS_caffe2_dnnlowp_weight_quantization_precision);
+  int requantization_multiplier_precision =
+      op->GetSingleArgument<int>(
+          "requantization_multiplier_precision",
+          FLAGS_caffe2_dnnlowp_requantization_multiplier_precision);
+  int eltwise_quantization_precision =
+      op->GetSingleArgument<int>(
+          "eltwise_quantization_precision",
+          FLAGS_caffe2_dnnlowp_eltwise_quantization_precision);
+  bool preserve_activation_sparsity =
+      op->GetSingleArgument<bool>(
+          "preserve_activation_sparsity",
+          FLAGS_caffe2_dnnlowp_preserve_activation_sparsity);
+  bool preserve_weight_sparsity =
+      op->GetSingleArgument<bool>(
+          "preserve_weight_sparsity",
+          FLAGS_caffe2_dnnlowp_preserve_weight_sparsity);
+  bool force_scale_power_of_two =
+      op->GetSingleArgument<bool>(
+          "force_scale_power_of_two",
+          FLAGS_caffe2_dnnlowp_force_scale_power_of_two);
+  string activation_quantization_kind =
+      op->GetSingleArgument<string>(
+          "activation_quantization_kind",
+          FLAGS_caffe2_dnnlowp_activation_quantization_kind);
+  string weight_quantization_kind =
+      op->GetSingleArgument<string>(
+          "weight_quantization_kind",
+          FLAGS_caffe2_dnnlowp_weight_quantization_kind);
+
+  VLOG(2) << "Quantization method for op with "
+          << " activation_precision " << activation_precision
+          << " weight_precision " << weight_precision
+          << " requantization_multiplier_precision "
+          << requantization_multiplier_precision
+          << " eltwise_quantization_precision "
+          << eltwise_quantization_precision << " preserve_activation_sparsity "
+          << preserve_activation_sparsity << " preserve_weight_sparsity "
+          << preserve_weight_sparsity << " force_scale_power_of_two "
+          << force_scale_power_of_two << " activation_quantization_kind "
+          << activation_quantization_kind << " weight_quantization_kind "
+          << weight_quantization_kind;
+
+  return unique_ptr<QuantizationFactory>(new QuantizationFactory(
+      activation_precision,
+      weight_precision,
+      requantization_multiplier_precision,
+      eltwise_quantization_precision,
+      preserve_activation_sparsity,
+      preserve_weight_sparsity,
+      force_scale_power_of_two,
+      StringToKind(activation_quantization_kind),
+      StringToKind(weight_quantization_kind)));
+}
+
 unique_ptr<QuantizationFactory> GetQuantizationFactoryOf(
     const OperatorBase* op) {
-  return GetQuantizationFactoryOf_(op->debug_def());
+  if (op->has_debug_def()) {
+    return GetQuantizationFactoryOf_(op->debug_def());
+  } else {
+    return GetQuantizationFactoryOf_(op);
+  }
 }
 
 void AdjustOutputTensorQuantizationParamsWithFollowedBy(
@@ -492,7 +559,7 @@ NetDef AddScaleZeroOffsetArgumentsWithHistogram(
         bins.push_back(cnt);
       }
 
-      if (!HasDNNLowPEngine_(op_def) ||
+      if (!HasDNNLowPEngine_(op_def.engine()) ||
           arg_helper.GetSingleArgument<int>("dequantize_output", 0) != 0 ||
           i > 0) {
         LOG(INFO) << "Skip " << op_def.type() << " " << op_def.output(0);

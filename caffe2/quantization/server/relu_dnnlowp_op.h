@@ -15,6 +15,11 @@ class ReluDNNLowPOp final : public Operator<CPUContext> {
       : Operator<CPUContext>(operator_def, ws),
         qfactory_(dnnlowp::GetQuantizationFactoryOf(this)) {}
 
+  ReluDNNLowPOp(
+      const c10::FunctionSchema&,
+      const std::vector<c10::IValue>&,
+      const std::vector<c10::IValue*>&);
+
   bool RunOnDevice() override;
 
  private:
@@ -27,5 +32,7 @@ template <typename T>
 void ReluAVX2(const int N, const int zero_point, const T* X, T* Y);
 
 } // namespace internal
+
+DECLARE_FUNCTION_SCHEMA_OPERATOR(QRelu);
 
 } // namespace caffe2

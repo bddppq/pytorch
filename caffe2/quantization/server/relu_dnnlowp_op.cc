@@ -57,17 +57,18 @@ bool ReluDNNLowPOp<T>::RunOnDevice() {
     }
   }
 
-  // Even if there is a pre-chosen quantization parameters for the output,
-  // it is ignored because relu output quantization should be same as the
-  // input.
-  PropagateOutputTensorQuantizationParams(this, 0, in_qparams);
-
   // If input was not quantized, output should be dequantized because ReLU
   // can be inplace.
   if (!X.template IsType<T>()) {
     fbgemm::Dequantize<T>(
         Y_data, Y->template mutable_data<float>(), Y->numel(), in_qparams);
+  } else {
+    // Even if there is a pre-chosen quantization parameters for the output,
+    // it is ignored because relu output quantization should be same as the
+    // input.
+    PropagateOutputTensorQuantizationParams(this, 0, in_qparams);
   }
+
 
   return true;
 }
@@ -76,5 +77,19 @@ REGISTER_CPU_OPERATOR_WITH_ENGINE(Relu, DNNLOWP, ReluDNNLowPOp<uint8_t>);
 REGISTER_CPU_OPERATOR_WITH_ENGINE(Relu, DNNLOWP_16, ReluDNNLowPOp<uint16_t>);
 
 REGISTER_CPU_OPERATOR_WITH_ENGINE(Int8Relu, DNNLOWP, ReluDNNLowPOp<uint8_t>);
+
+template <>
+ReluDNNLowPOp<uint8_t>::ReluDNNLowPOp(
+    const c10::FunctionSchema& f,
+    const std::vector<c10::IValue>& i,
+    const std::vector<c10::IValue*>& o)
+    : Operator<CPUContext>(f, i, o),
+      qfactory_(dnnlowp::GetQuantizationFactoryOf(this)) {}
+
+DEFINE_FUNCTION_SCHEMA_OPERATOR(
+    QRelu,
+    (std::vector<c10::Argument>{c10::Argument("input_0")}),
+    (std::vector<c10::Argument>{c10::Argument("output_0")}),
+    ReluDNNLowPOp<uint8_t>);
 
 } // namespace caffe2

@@ -74,6 +74,9 @@ class CAFFE2_API OperatorBase : public Observable<OperatorBase> {
           *operator_def_, name, default_value);
     }
     auto index = getFunctionSchema().argumentIndexWithName(name);
+    if (!index.has_value()) {
+      return default_value;
+    }
     CAFFE_ENFORCE(index.has_value(), "Couldn't get index for argument!", name);
     const auto& value = ivalue_inputs_[index.value()];
     return value.template to<T>();
@@ -289,7 +292,11 @@ class CAFFE2_API OperatorBase : public Observable<OperatorBase> {
         !std::is_same<T, Tensor>::value,
         "You should use InputIsTensorType(int, DeviceType) for "
         "Tensor.");
-    return inputs_.at(idx)->template IsType<T>();
+    if (isLegacyOperator()) {
+      return inputs_.at(idx)->template IsType<T>();
+    } else {
+      return false;
+    }
   }
 
   inline bool InputIsTensorType(int idx, DeviceType device_type) {
