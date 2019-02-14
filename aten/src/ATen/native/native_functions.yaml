@@ -138,6 +138,15 @@
 - func: avg_pool1d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, bool ceil_mode=False, bool count_include_pad=True) -> Tensor
   matches_jit_signature: True
 
+- func: quantized_avg_pool1d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, bool ceil_mode=False, bool count_include_pad=True) -> Tensor
+  matches_jit_signature: True
+
+- func: quantized_avg_pool2d(Tensor self, int[2] kernel_size, int[2] stride=[], int[2] padding=0, bool ceil_mode=False, bool count_include_pad=True) -> Tensor
+  matches_jit_signature: True
+
+- func: quantized_avg_pool3d(Tensor self, int[3] kernel_size, int[3] stride=[], int[3] padding=0, bool ceil_mode=False, bool count_include_pad=True) -> Tensor
+  matches_jit_signature: True
+
 - func: adaptive_avg_pool1d(Tensor self, int[1] output_size) -> Tensor
   matches_jit_signature: True
 
@@ -529,6 +538,9 @@
   matches_jit_signature: True
 
 - func: conv3d(Tensor input, Tensor weight, Tensor? bias=None, int[3] stride=1, int[3] padding=0, int[3] dilation=1, int groups=1) -> Tensor
+  matches_jit_signature: True
+
+- func: quantized_conv_relu2d(Tensor input, Tensor weight, Tensor? bias=None, int[2] stride=1, int[2] padding=0, int[2] dilation=1, int groups=1) -> Tensor
   matches_jit_signature: True
 
 - func: conv_tbc(Tensor self, Tensor weight, Tensor bias, int pad=0) -> Tensor
@@ -1205,7 +1217,7 @@
 - func: fbgemm_linear_quantize_weight(Tensor input) -> (Tensor, Tensor, float, int)
   matches_jit_signature: True
 
-- func: fbgemm_pack_quantized_matrix(Tensor input, int K, int N) -> Tensor
+- func: fbgemm_pack_quantized_matrix(Tensor weight) -> Tensor
   matches_jit_signature: True
 
 - func: fbgemm_is_cpu_supported() -> bool
@@ -1362,6 +1374,15 @@
 
 # Return: (Tensor output, Tensor indices)
 - func: max_pool1d_with_indices(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, int[1] dilation=1, bool ceil_mode=False) -> (Tensor, Tensor)
+  matches_jit_signature: True
+
+- func: quantized_max_pool1d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, int[1] dilation=1, bool ceil_mode=False) -> Tensor
+  matches_jit_signature: True
+
+- func: quantized_max_pool2d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, int[1] dilation=1, bool ceil_mode=False) -> Tensor
+  matches_jit_signature: True
+
+- func: quantized_max_pool3d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, int[1] dilation=1, bool ceil_mode=False) -> Tensor
   matches_jit_signature: True
 
 - func: max_pool1d(Tensor self, int[1] kernel_size, int[1] stride=[], int[1] padding=0, int[1] dilation=1, bool ceil_mode=False) -> Tensor

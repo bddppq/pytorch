@@ -31,6 +31,8 @@ import errno
 import expecttest
 import hashlib
 
+import numpy as np
+
 import torch
 import torch.cuda
 from torch._utils_internal import get_writable_path
@@ -822,6 +824,26 @@ def do_test_empty_full(self, dtypes, layout, device):
                 check_value(torch.full_like(v, fv + 5,
                                             dtype=int64_dtype, layout=layout, device=device, requires_grad=False),
                             int64_dtype, layout, device, fv + 5, False)
+
+
+# This function asserts quantized results (output[1:]) are close enough to
+# floating point results (output[0]).
+# The error bound is derived based on assumption that there's no input
+# quantization error.
+def check_quantized_results_close(outputs, ref=None, symmetric=False, atol_scale=0.53):
+    if ref is None:
+        ref = outputs[0][0]
+    ref_min = min(np.min(ref), 0)
+    ref_max = max(np.max(ref), 0)
+    if symmetric:
+        ref_scale = 2 * max(abs(ref_max), abs(ref_min)) / 255
+    else:
+        ref_scale = (ref_max - ref_min) / 255
+    # should be divided by 2 in an exact math, but divide by 1.9 here
+    # considering finite precision in floating-point numbers
+    atol = ref_scale * atol_scale
+    for o in outputs[1:]:
+        np.testing.assert_allclose(o[0], outputs[0][0], atol=atol, rtol=0)
 
 
 IS_SANDCASTLE = os.getenv('SANDCASTLE') == '1' or os.getenv('TW_JOB_USER') == 'sandcastle'

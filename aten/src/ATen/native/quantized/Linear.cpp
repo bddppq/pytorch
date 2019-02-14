@@ -219,50 +219,6 @@ std::tuple<Tensor, Tensor, double, int64_t> fbgemm_linear_quantize_weight(
       quantized, col_offsets, q_params.scale, q_params.zero_point);
 }
 
-bool fbgemm_is_cpu_supported() {
-  return fbgemm::fbgemmSupportedCPU();
-}
-
-Tensor fbgemm_pack_quantized_matrix(
-    const Tensor& weight,
-    int64_t K,
-    int64_t N) {
-  // We make a strong guarantee that models using these operators will have the
-  // same numerics across different machines. Therefore, we do not provide a
-  // fallback path and rather fail loudly if we cannot run FBGEMM.
-  AT_ASSERTM(fbgemm::fbgemmSupportedCPU(), "Your CPU does not support FBGEMM.");
-  auto weight_contig = weight.contiguous();
-  auto contiguous_ptr = weight_contig.data<int8_t>();
-  auto* ptr = new fbgemm::PackBMatrix<int8_t>(
-      /*trans=*/fbgemm::matrix_op_t::Transpose,
-      /*nRow=*/K,
-      /*nCol=*/N,
-      /*smat=*/contiguous_ptr,
-      /*ld=*/K,
-      /*pmat=*/nullptr, // PackBMatrix manages ownership of pmat
-      /*groups=*/1);
-
-  // We store this instance away in a Tensor and register a deleter function
-  // so that we do not leak memory. On the other side, we pull out the storage's
-  // data_ptr and get the PackBMatrix's pointer.
-  at::DataPtr at_ptr(
-      ptr,
-      ptr,
-      [](void* ptr) {
-        fbgemm::PackBMatrix<int8_t>* typed_ptr =
-            reinterpret_cast<fbgemm::PackBMatrix<int8_t>*>(ptr);
-        delete typed_ptr;
-      },
-      at::kCPU);
-
-  auto retval = at::empty(
-      {sizeof(fbgemm::PackBMatrix<int8_t>)}, weight.options().dtype(at::kByte));
-
-  retval.storage().set_data_ptr(std::move(at_ptr));
-
-  return retval;
-}
-
 #else // USE_FBGEMM
 
 Tensor fbgemm_linear_int8_weight(
@@ -287,21 +243,6 @@ std::tuple<Tensor, Tensor, double, int64_t> fbgemm_linear_quantize_weight(
   // fallback path and rather fail loudly if we cannot run FBGEMM.
   AT_ASSERTM(
       false, "This PyTorch installation was not built with FBGEMM operators");
-}
-
-Tensor fbgemm_pack_quantized_matrix(
-    const Tensor& /*input*/,
-    int64_t /*K*/,
-    int64_t /*N*/) {
-  // We make a strong guarantee that models using these operators will have the
-  // same numerics across different machines. Therefore, we do not provide a
-  // fallback path and rather fail loudly if we cannot run FBGEMM.
-  AT_ASSERTM(
-      false, "This PyTorch installation was not built with FBGEMM operators");
-}
-
-bool fbgemm_is_cpu_supported() {
-  return false;
 }
 
 #endif // USE_FBGEMM

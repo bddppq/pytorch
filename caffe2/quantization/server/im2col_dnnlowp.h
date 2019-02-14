@@ -4,8 +4,6 @@
 #include <omp.h>
 #endif
 
-#include "caffe2/core/operator.h"
-#include "caffe2/utils/math.h"
 #include "caffe2/utils/math/utils.h"
 
 namespace caffe2 {

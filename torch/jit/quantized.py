@@ -24,13 +24,12 @@ class QuantizedLinear(torch.jit.ScriptModule):
 
         self.register_buffer(
             'packed_tensor_ptr',
-            torch.fbgemm_pack_quantized_matrix(self.weight.clone(), self.weight.size(1), self.weight.size(0)))
+            torch.fbgemm_pack_quantized_matrix(self.weight.clone()))
 
     @torch.jit.script_method
     def _unpack(self):
         self.packed_tensor_ptr.set_(
-            torch.fbgemm_pack_quantized_matrix(
-                self.weight, self.weight.size(1), self.weight.size(0)))
+            torch.fbgemm_pack_quantized_matrix(self.weight))
 
     @torch.jit.script_method
     def _pack(self):
@@ -116,11 +115,8 @@ class QuantizedRNNCellBase(torch.jit.ScriptModule):
     # @torch._jit_internal.weak_script_method
     @torch.jit.script_method
     def _unpack(self):
-        self.packed_ih.set_(torch.fbgemm_pack_quantized_matrix(
-            self.weight_ih, self.weight_ih.size(1), self.weight_ih.size(0)))
-        self.packed_hh.set_(
-            torch.fbgemm_pack_quantized_matrix(
-                self.weight_hh, self.weight_hh.size(1), self.weight_hh.size(0)))
+        self.packed_ih.set_(torch.fbgemm_pack_quantized_matrix(self.weight_ih))
+        self.packed_hh.set_(torch.fbgemm_pack_quantized_matrix(self.weight_hh))
 
     # @torch._jit_internal.weak_script_method
     @torch.jit.script_method
@@ -207,6 +203,52 @@ class QuantizedGRUCell(QuantizedRNNCellBase):
         )
 
 
+class QuantizedAvgPool2d(torch.jit.ScriptModule):
+    __constants__ = ['kernel_size', 'stride', 'padding',
+                     'ceil_mode', 'count_include_pad']
+
+    def __init__(self, other):
+        super(QuantizedAvgPool2d, self).__init__()
+        self.kernel_size = other.kernel_size
+        self.stride = other.stride
+        self.padding = other.padding
+        self.ceil_mode = other.ceil_mode
+        self.count_include_pad = other.count_include_pad
+
+    @torch.jit.script_method
+    def forward(self, input):
+        return torch.quantized_avg_pool2d(
+            input,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.ceil_mode,
+            self.count_include_pad)
+
+
+class QuantizedMaxPool2d(torch.jit.ScriptModule):
+    __constants__ = ['kernel_size', 'stride', 'padding',
+                     'dilation', 'ceil_mode', 'count_include_pad']
+
+    def __init__(self, other):
+        super(QuantizedMaxPool2d, self).__init__()
+        self.kernel_size = (other.kernel_size, other.kernel_size)
+        self.stride = (other.stride, other.stride)
+        self.padding = (other.padding, other.padding)
+        self.dilation = (other.dilation, other.dilation)
+        self.ceil_mode = other.ceil_mode
+
+    @torch.jit.script_method
+    def forward(self, input):
+        return torch.quantized_max_pool2d(
+            input,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.ceil_mode)
+
+
 def quantize_rnn_cell_modules(module):
     reassign = {}
     for name, mod in module.named_modules():
@@ -240,4 +282,59 @@ def quantize_linear_modules(module):
         setattr(module, name, mod)
     if isinstance(mod, torch.nn.Linear):
         return QuantizedLinear(mod)
+    return module
+
+
+def quantize_avg_pool_modules(module):
+    reassign = {}
+    for name, mod in module.named_modules():
+        if mod is module:
+            continue
+        new_mod = quantize_linear_modules(mod)
+        if new_mod is not mod:
+            reassign[name] = new_mod
+
+    for name, mod in reassign.items():
+        setattr(module, name, mod)
+    if isinstance(module, torch.nn.AvgPool2d):
+        return QuantizedAvgPool2d(module)
+    return module
+
+def quantize_max_pool_modules(module):
+    reassign = {}
+    for name, mod in module.named_modules():
+        if mod is module:
+            continue
+        new_mod = quantize_linear_modules(mod)
+        if new_mod is not mod:
+            reassign[name] = new_mod
+
+    for name, mod in reassign.items():
+        setattr(module, name, mod)
+    if isinstance(module, torch.nn.MaxPool2d):
+        return QuantizedMaxPool2d(module)
+    return module
+
+
+mapping = {
+    torch.nn.Linear: QuantizedLinear,
+    torch.nn.MaxPool2d: QuantizedMaxPool2d,
+    torch.nn.AvgPool2d: QuantizedAvgPool2d,
+    # torch.nn.Add: QuantizedAdd,
+    # torch.nn.ConvBNRelu2d: QuantizedConvRelu2d,
+}
+
+def quantize_model(module):
+    reassign = {}
+    for name, mod in module.named_modules():
+        if mod is module:
+            continue
+        new_mod = quantize_model(mod)
+        if new_mod is not mod:
+            reassign[name] = new_mod
+
+    for name, mod in reassign.items():
+        setattr(module, name, mod)
+    if module in mapping:
+        return mapping[mod](module)
     return module

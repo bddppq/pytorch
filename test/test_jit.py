@@ -16,7 +16,7 @@ from torch.onnx import OperatorExportTypes
 from torch._six import inf, PY2, builtins
 from common_utils import TestCase, run_tests, IS_WINDOWS, TEST_WITH_UBSAN, \
     skipIfRocm, skipIfNoLapack, suppress_warnings, load_tests, IS_SANDCASTLE, \
-    freeze_rng_state, set_rng_seed
+    freeze_rng_state, set_rng_seed, check_quantized_results_close
 from common_nn import module_tests, new_module_tests, criterion_tests
 from textwrap import dedent
 from functools import wraps
@@ -5476,6 +5476,46 @@ a")
                 return y
         a = A()
         self.assertEqual(a.with_docstring.__doc__, 'test str')
+
+    @unittest.skipIf(TEST_WITH_UBSAN, 'fbgemm does not play well with ubsan')
+    @unittest.skipIf(not torch.fbgemm_is_cpu_supported(),
+                     'cpu does not support fbgemm')
+    def test_quantized_avg_pool(self):
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.avg_pool = nn.AvgPool2d(kernel_size=3, stride=2)
+
+            def forward(self, x):
+                x = self.avg_pool(x)
+                return x
+
+        x = torch.rand(1, 3, 224, 224).float() * 10
+        net = Net()
+        out = net(x)
+        quantized_net = torch.jit.quantized.quantize_avg_pool_modules(net)
+        quantized_out = quantized_net(x)
+        check_quantized_results_close([out.numpy(), quantized_out.numpy()], atol_scale=0.9)
+
+    @unittest.skipIf(TEST_WITH_UBSAN, 'fbgemm does not play well with ubsan')
+    @unittest.skipIf(not torch.fbgemm_is_cpu_supported(),
+                     'cpu does not support fbgemm')
+    def test_quantized_max_pool(self):
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
+
+            def forward(self, x):
+                x = self.max_pool(x)
+                return x
+
+        x = torch.rand(1, 3, 224, 224).float() * 10
+        net = Net()
+        out = net(x)
+        quantized_net = torch.jit.quantized.quantize_max_pool_modules(net)
+        quantized_out = quantized_net(x)
+        check_quantized_results_close([out.numpy(), quantized_out.numpy()])
 
     @unittest.skipIf(TEST_WITH_UBSAN or not torch.fbgemm_is_cpu_supported(),
                      'Quantized RNN requires FBGEMM. FBGEMM does not play'
