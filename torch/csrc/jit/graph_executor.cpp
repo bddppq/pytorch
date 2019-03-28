@@ -8,6 +8,7 @@
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/interpreter.h>
 #include <torch/csrc/jit/ir.h>
+#include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/batch_mm.h>
 #include <torch/csrc/jit/passes/canonicalize_ops.h>
 #include <torch/csrc/jit/passes/common_subexpression_elimination.h>
@@ -505,6 +506,9 @@ struct GraphExecutorImpl {
   }
 
   void runNondiffOptimization(std::shared_ptr<Graph>& graph) {
+    for (const auto& pass : getPasses()) {
+      pass(graph);
+    }
     FuseGraph(graph);
   }
 
