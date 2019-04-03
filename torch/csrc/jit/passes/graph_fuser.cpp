@@ -169,7 +169,8 @@ struct GraphFuser {
   Block* block_;
   std::unique_ptr<AliasDb> aliasDb_;
   std::shared_ptr<Graph> graph_;
-  std::function<bool(Node*)> callback_ = nullptr;
+  using FusionCallback = std::function<bool(Node*)>;
+  FusionCallback callback_ = [&](Node* n) { return isFusableDefault(n); };
   Symbol kind_ = prim::FusionGroup;
 
   GraphFuser(Block* block, std::shared_ptr<Graph> graph)
