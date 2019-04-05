@@ -197,7 +197,7 @@ struct GraphFuser {
     if (callback_) {
       return isFusableCallback(node);
     }
-    return isFusableMap(node) || isFusableBatchNorm(node);
+    return isFusableDefault(node);
   }
 
   bool isFusableCallback(Node* node) {
@@ -208,6 +208,10 @@ struct GraphFuser {
       return false;
     }
     return callback_(node);
+  }
+
+  bool isFusableDefault(Node* node) {
+    return isFusableMap(node) || isFusableBatchNorm(node);
   }
 
   bool isFusableMap(Node* node) {
