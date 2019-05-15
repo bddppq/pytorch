@@ -78,32 +78,6 @@ if [[ "$BUILD_ENVIRONMENT" == *rocm* ]]; then
   # tests. Setting MAX_JOBS to smaller number to make CI less flaky.
   export MAX_JOBS=4
 
-  # ROCm CI is using Caffe2 docker images, which needs these wrapper
-  # scripts to correctly use sccache.
-  if [ -n "${SCCACHE_BUCKET}" ]; then
-    mkdir -p ./sccache
-
-    SCCACHE="$(which sccache)"
-    if [ -z "${SCCACHE}" ]; then
-      echo "Unable to find sccache..."
-      exit 1
-    fi
-
-    # Setup wrapper scripts
-    for compiler in cc c++ gcc g++; do
-      (
-        echo "#!/bin/sh"
-        echo "exec $SCCACHE $(which $compiler) \"\$@\""
-      ) > "./sccache/$compiler"
-      chmod +x "./sccache/$compiler"
-    done
-
-    export CACHE_WRAPPER_DIR="$PWD/sccache"
-
-    # CMake must find these wrapper scripts
-    export PATH="$CACHE_WRAPPER_DIR:$PATH"
-  fi
-
   python tools/amd_build/build_amd.py
   # OPENCV is needed to enable ImageInput operator in caffe2 resnet5_trainer
   # LMDB is needed to read datasets from https://download.caffe2.ai/databases/resnet_trainer.zip

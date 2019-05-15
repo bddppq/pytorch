@@ -9,10 +9,6 @@ ARG UBUNTU_VERSION
 ADD ./install_base.sh install_base.sh
 RUN bash ./install_base.sh && rm install_base.sh
 
-# Compile/install ccache for faster builds
-ADD ./install_ccache.sh install_ccache.sh
-RUN bash ./install_ccache.sh && rm install_ccache.sh
-
 # (optional) Install non-default GCC version
 ARG GCC_VERSION
 ADD ./install_gcc.sh install_gcc.sh
@@ -36,6 +32,10 @@ ARG ANACONDA_VERSION
 ADD ./install_anaconda.sh install_anaconda.sh
 RUN if [ -n "${ANACONDA_VERSION}" ]; then bash ./install_anaconda.sh; fi
 RUN rm install_anaconda.sh
+
+# Compile/install ccache for faster builds
+ADD ./install_ccache.sh install_ccache.sh
+RUN bash ./install_ccache.sh && rm install_ccache.sh
 
 # (optional) Add Jenkins user
 ARG JENKINS

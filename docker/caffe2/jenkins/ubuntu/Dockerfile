@@ -7,10 +7,6 @@ ARG UBUNTU_VERSION
 ADD ./install_base.sh install_base.sh
 RUN bash ./install_base.sh && rm install_base.sh
 
-# Compile/install ccache for faster builds
-ADD ./install_ccache.sh install_ccache.sh
-RUN bash ./install_ccache.sh && rm install_ccache.sh
-
 # Install Python
 ARG PYTHON_VERSION
 ADD ./install_python.sh install_python.sh
@@ -53,6 +49,10 @@ ARG CMAKE_VERSION
 ADD ./install_cmake.sh install_cmake.sh
 RUN if [ -n "${CMAKE_VERSION}" ]; then bash ./install_cmake.sh; fi
 RUN rm install_cmake.sh
+
+# Compile/install ccache for faster builds
+ADD ./install_ccache.sh install_ccache.sh
+RUN bash ./install_ccache.sh && rm install_ccache.sh
 
 # (optional) Add Jenkins user
 ARG JENKINS
