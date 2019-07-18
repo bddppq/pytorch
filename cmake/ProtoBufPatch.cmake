@@ -4,9 +4,17 @@
 
 file(READ ${FILENAME} content)
 
+# Redirect references of `GetGetEmptyStringAlreadyInited` from
+# protobuf internal namespace to the one in our namespace,
+# i.e. rewrite from e.g.
+#   `::google::internal::GetEmptyStringAlreadyInited`
+#   `::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited`
+# to
+#   `GetEmptyStringAlreadyInited`
 string(
+  REGEX
   REPLACE
-  "::google::protobuf::internal::GetEmptyStringAlreadyInited"
+  "[:a-zA-Z0-9_]+GetEmptyStringAlreadyInited"
   "GetEmptyStringAlreadyInited"
   content
   "${content}")
