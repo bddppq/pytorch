@@ -2,6 +2,7 @@ import contextlib
 import gc
 import sys
 import math
+import os
 import tempfile
 import time
 import torch
@@ -3268,6 +3269,8 @@ class TestAutograd(TestCase):
             torch.autograd.backward([u, s, v], [torch.ones_like(u), torch.ones_like(s), torch.ones_like(v)])
 
     def test_no_grad_copy(self):
+        if torch.autograd.get_num_threads_per_device() > 1:
+            raise unittest.SkipTest("Not guaranteed in multithreaded environment")
         # create autograd function that saves grad pointer as class static
         class MyFunc(Function):
             static_grad_ptr = None
@@ -3470,6 +3473,9 @@ for shape in [(1,), ()]:
         self.assertEqual(x.grad, torch.ones(n, 1, device='cuda'))
 
     def test_reentrant_priority(self):
+        if torch.autograd.get_num_threads_per_device() > 1:
+            raise unittest.SkipTest("Not guaranteed in multithreaded environment")
+
         order = []
 
         class MyFunction(Function):
@@ -3765,4 +3771,8 @@ for test in method_tests():
     add_test(*test)
 
 if __name__ == '__main__':
+    nthreads = int(os.environ.get('AUTOGRAD_NUM_THREADS_PER_DEVICE', 1))
+    if nthreads != torch.autograd.get_num_threads_per_device():
+        torch.autograd.set_num_threads_per_device(nthreads)
+        print('Using {} threads per device to run autograd'.format(nthreads))
     run_tests()

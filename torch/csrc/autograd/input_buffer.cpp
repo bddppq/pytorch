@@ -14,6 +14,7 @@ void InputBuffer::add(size_t pos, Variable var) {
   if (!var.defined()) {
     return;
   }
+
   auto& old_var = buffer[pos];
   if (!old_var.defined()) {
     buffer[pos] = std::move(var);
