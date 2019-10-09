@@ -735,6 +735,27 @@ std::vector<Tensor> split_with_sizes(const Tensor& self, IntArrayRef split_sizes
   return splits;
 }
 
+std::vector<Tensor> split_with_sizes(const Tensor& self, const Tensor& split_sizes, int64_t dim) {
+  TORCH_CHECK(split_sizes.scalar_type() == at::kLong);
+  TORCH_CHECK(split_sizes.device() == at::kCPU);
+  TORCH_CHECK(
+      split_sizes.dim() == 0 || split_sizes.dim() == 1,
+      "expecting 0 or 1 dimensional split_sizes tensor, got ",
+      split_sizes.dim(),
+      "-d");
+
+  if (split_sizes.dim() == 0) {
+    return at::native::split(self, *split_sizes.data_ptr<int64_t>(), dim);
+  } else {
+    std::vector<int64_t> split_sizes_vec(split_sizes.numel());
+    std::memcpy(
+        split_sizes_vec.data(),
+        split_sizes.data_ptr<int64_t>(),
+        split_sizes.numel());
+    return at::native::split_with_sizes(self, split_sizes_vec, dim);
+  }
+}
+
 static inline std::vector<Tensor> get_stack_inputs(TensorList tensors, int64_t dim) {
   std::vector<Tensor> inputs(tensors.size());
   for (size_t i = 0; i < tensors.size(); ++i) {
