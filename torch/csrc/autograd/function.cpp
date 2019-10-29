@@ -6,7 +6,9 @@
 #include <ATen/ATen.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -15,16 +17,32 @@
 
 namespace torch { namespace autograd {
 
-/// Monotonically incrementing (thread local!) counter to supply sequence
-/// numbers.
-thread_local uint64_t Function_next_sequence_nr_ = 0;
-
-uint64_t Node::peek_at_next_sequence_nr() {
-  return Function_next_sequence_nr_;
+// autograd functions' sequence_nr is thread local.
+// In order to make them less likely to collide across threads, we initialize
+// them with different values:
+// There is a global atomic (16bit) counter for all the threads (that ever
+// create autograd functions). At the time of such a thread is created, the
+// counter will be bumped and stored as the first two bytes in the initial value
+// of the sequence_nr. During runtime, each sequence_nr will increase
+// montonically.
+// Note there are still chances the sequence_nr can collide across threads (when
+// the total number of threads overflows 16bit, or in a thread the total number
+// of autograd functions overflows 48bit).
+namespace {
+uint64_t init_next_sequence_nr() {
+  static std::atomic<uint16_t> counter{0};
+  return static_cast<uint64_t>(counter++)
+         << ((sizeof(uint64_t) - sizeof(uint16_t)) * CHAR_BIT);
+}
 }
 
 uint64_t& Node::get_next_sequence_nr() {
-  return Function_next_sequence_nr_;
+  thread_local static uint64_t next_sequence_nr = init_next_sequence_nr();
+  return next_sequence_nr;
+}
+
+uint64_t Node::peek_at_next_sequence_nr() {
+  return Node::get_next_sequence_nr();
 }
 
 auto Node::name() const -> std::string {
