@@ -353,6 +353,9 @@ add_custom_command(
 )
 
 add_library(torch_python SHARED ${TORCH_PYTHON_SRCS})
+set_target_properties(torch_python PROPERTIES PREFIX "")
+set_target_properties(torch_python PROPERTIES OUTPUT_NAME "_C")
+set_target_properties(torch_python PROPERTIES SUFFIX ".cpython-36m-x86_64-linux-gnu.so")
 add_dependencies(torch_python torch_python_stubs)
 
 # Required workaround for generated sources

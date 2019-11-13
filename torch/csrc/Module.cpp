@@ -802,3 +802,8 @@ struct call_duplicate_guard {
 };
 
 static call_duplicate_guard _call_duplicate_guard;
+
+PyObject* PyInit__C()
+{
+  return initModule();
+}

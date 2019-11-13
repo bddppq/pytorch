@@ -447,7 +447,8 @@ class build_ext(setuptools.command.build_ext.build_ext):
         # setuptools. Only the contents of this folder are installed in the
         # "install" command by default.
         # We only make this copy for Caffe2's pybind extensions
-        caffe2_pybind_exts = [
+        exts = [
+            'torch._C',
             'caffe2.python.caffe2_pybind11_state',
             'caffe2.python.caffe2_pybind11_state_gpu',
             'caffe2.python.caffe2_pybind11_state_hip',
@@ -455,7 +456,7 @@ class build_ext(setuptools.command.build_ext.build_ext):
         i = 0
         while i < len(self.extensions):
             ext = self.extensions[i]
-            if ext.name not in caffe2_pybind_exts:
+            if ext.name not in exts:
                 i += 1
                 continue
             fullname = self.get_ext_fullname(ext.name)
@@ -539,6 +540,7 @@ class clean(distutils.command.clean.clean):
         # It's an old-style class in Python 2.7...
         distutils.command.clean.clean.run(self)
 
+
 def configure_extension_build():
     r"""Configures extension build options according to system environment and user's choice.
 
@@ -553,127 +555,9 @@ def configure_extension_build():
         cmake_cache_vars = defaultdict(lambda: False)
 
     ################################################################################
-    # Configure compile flags
-    ################################################################################
-
-    library_dirs = []
-
-    if IS_WINDOWS:
-        # /NODEFAULTLIB makes sure we only link to DLL runtime
-        # and matches the flags set for protobuf and ONNX
-        extra_link_args = ['/NODEFAULTLIB:LIBCMT.LIB']
-        # /MD links against DLL runtime
-        # and matches the flags set for protobuf and ONNX
-        # /Z7 turns on symbolic debugging information in .obj files
-        # /EHa is about native C++ catch support for asynchronous
-        # structured exception handling (SEH)
-        # /DNOMINMAX removes builtin min/max functions
-        # /wdXXXX disables warning no. XXXX
-        extra_compile_args = ['/MD', '/Z7',
-                              '/EHa', '/DNOMINMAX',
-                              '/wd4267', '/wd4251', '/wd4522', '/wd4522', '/wd4838',
-                              '/wd4305', '/wd4244', '/wd4190', '/wd4101', '/wd4996',
-                              '/wd4275']
-        if sys.version_info[0] == 2:
-            if not check_env_flag('FORCE_PY27_BUILD'):
-                report('The support for PyTorch with Python 2.7 on Windows is very experimental.')
-                report('Please set the flag `FORCE_PY27_BUILD` to 1 to continue build.')
-                sys.exit(1)
-            # /bigobj increases number of sections in .obj file, which is needed to link
-            # against libaries in Python 2.7 under Windows
-            extra_compile_args.append('/bigobj')
-    else:
-        extra_link_args = []
-        extra_compile_args = [
-            '-std=c++11',
-            '-Wall',
-            '-Wextra',
-            '-Wno-strict-overflow',
-            '-Wno-unused-parameter',
-            '-Wno-missing-field-initializers',
-            '-Wno-write-strings',
-            '-Wno-unknown-pragmas',
-            # This is required for Python 2 declarations that are deprecated in 3.
-            '-Wno-deprecated-declarations',
-            # Python 2.6 requires -fno-strict-aliasing, see
-            # http://legacy.python.org/dev/peps/pep-3123/
-            # We also depend on it in our code (even Python 3).
-            '-fno-strict-aliasing',
-            # Clang has an unfixed bug leading to spurious missing
-            # braces warnings, see
-            # https://bugs.llvm.org/show_bug.cgi?id=21629
-            '-Wno-missing-braces',
-        ]
-        if check_env_flag('WERROR'):
-            extra_compile_args.append('-Werror')
-
-    library_dirs.append(lib_path)
-
-    # we specify exact lib names to avoid conflict with lua-torch installs
-    CAFFE2_LIBS = []
-
-    main_compile_args = []
-    main_libraries = ['shm', 'torch_python']
-    main_link_args = []
-    main_sources = ["torch/csrc/stub.cpp"]
-
-    # Before the introduction of stub.cpp, _C.so and libcaffe2.so defined
-    # some of the same symbols, and it was important for _C.so to be
-    # loaded before libcaffe2.so so that the versions in _C.so got
-    # used. This happened automatically because we loaded _C.so directly,
-    # and libcaffe2.so was brought in as a dependency (though I suspect it
-    # may have been possible to break by importing caffe2 first in the
-    # same process).
-    #
-    # Now, libtorch_python.so and libcaffe2.so define some of the same
-    # symbols. We directly load the _C.so stub, which brings both of these
-    # in as dependencies. We have to make sure that symbols continue to be
-    # looked up in libtorch_python.so first, by making sure it comes
-    # before libcaffe2.so in the linker command.
-    main_link_args.extend(CAFFE2_LIBS)
-
-    if cmake_cache_vars['USE_CUDA']:
-        library_dirs.append(
-            os.path.dirname(cmake_cache_vars['CUDA_CUDA_LIB']))
-
-    if build_type.is_debug():
-        if IS_WINDOWS:
-            extra_link_args.append('/DEBUG:FULL')
-        else:
-            extra_compile_args += ['-O0', '-g']
-            extra_link_args += ['-O0', '-g']
-
-    if build_type.is_rel_with_deb_info():
-        if IS_WINDOWS:
-            extra_link_args.append('/DEBUG:FULL')
-        else:
-            extra_compile_args += ['-g']
-            extra_link_args += ['-g']
-
-
-    def make_relative_rpath(path):
-        if IS_DARWIN:
-            return '-Wl,-rpath,@loader_path/' + path
-        elif IS_WINDOWS:
-            return ''
-        else:
-            return '-Wl,-rpath,$ORIGIN/' + path
-
-    ################################################################################
     # Declare extensions and package
     ################################################################################
-
     extensions = []
-    packages = find_packages(exclude=('tools', 'tools.*'))
-    C = Extension("torch._C",
-                  libraries=main_libraries,
-                  sources=main_sources,
-                  language='c++',
-                  extra_compile_args=main_compile_args + extra_compile_args,
-                  include_dirs=[],
-                  library_dirs=library_dirs,
-                  extra_link_args=extra_link_args + main_link_args + [make_relative_rpath('lib')])
-    extensions.append(C)
 
     if not IS_WINDOWS:
         DL = Extension("torch._dl",
@@ -683,6 +567,11 @@ def configure_extension_build():
 
     # These extensions are built by cmake and copied manually in build_extensions()
     # inside the build_ext implementaiton
+    extensions.append(
+        Extension(
+            name=str('torch._C'),
+            sources=[]),
+    )
     extensions.append(
         Extension(
             name=str('caffe2.python.caffe2_pybind11_state'),
@@ -706,6 +595,8 @@ def configure_extension_build():
         'clean': clean,
         'install': install,
     }
+
+    packages = find_packages(exclude=('tools', 'tools.*'))
 
     entry_points = {
         'console_scripts': [
