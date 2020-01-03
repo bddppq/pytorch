@@ -100,12 +100,12 @@ class TestModels(TestCase):
     def test_vgg19(self):
         # VGG 19-layer model (configuration "E")
         x = Variable(torch.randn(BATCH_SIZE, 3, 224, 224).fill_(1.0))
-        self.exportTest(toC(vgg19()), toC(x))
+        self.exportTest(toC(vgg19()), toC(x), atol=1e-6)
 
     def test_vgg19_bn(self):
         # VGG 19-layer model (configuration 'E') with batch normalization
         x = Variable(torch.randn(BATCH_SIZE, 3, 224, 224).fill_(1.0))
-        self.exportTest(toC(vgg19_bn()), toC(x))
+        self.exportTest(toC(vgg19_bn()), toC(x), atol=1e-6)
 
     def test_resnet(self):
         # ResNet50 model
