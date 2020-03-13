@@ -46,6 +46,7 @@
 #include <torch/csrc/jit/passes/tensorexpr_fuser.h>
 #include <torch/csrc/jit/passes/utils/check_alias_annotation.h>
 #include <torch/csrc/jit/passes/freeze_module.h>
+#include <torch/csrc/jit/passes/list_prim_ops.h>
 #include <torch/csrc/jit/runtime/print_handler.h>
 #include <torch/csrc/jit/python/pybind_utils.h>
 #include <torch/csrc/jit/python/python_arg_flatten.h>
@@ -204,6 +205,7 @@ void initJITBindings(PyObject* module) {
             return freeze_module(module);
           },
           py::arg("module"))
+      .def("_jit_pass_list_prim_ops", &ListPrimOps)
       .def("_jit_pass_fuse_linear", &FuseLinear)
       .def(
           "_jit_pass_fold_quantize",
